@@ -1,3 +1,7 @@
+"""
+用于fMRI数据的潜流形嵌入正则化自动编码器
+一个编码器，多个解码器
+"""
 ###########################################################################
 ## latent manifold embedding regularized autoencoder for fMRI data
 ## one encoder, multiple decoders
@@ -147,7 +151,7 @@ class ExperimentParameters():
 
 
 def main():
-    # params
+    # 参数设置 params
     args = parser.parse_args()
 
     param = ExperimentParameters(args)
@@ -155,7 +159,7 @@ def main():
     if os.path.exists(args.summary_file):
         param.set_results_df()  
 
-    # set up train_half for dataset
+    # 为数据集设置train_half 。 set up train_half for dataset
     if args.train_half is not None:
         args.n_timerange = args.n_timerange // 2
         if args.train_half == 1:
@@ -165,32 +169,36 @@ def main():
     else:
         train_half = np.arange(args.n_timerange)
 
-    # make training reproducible
+    # 使训练具有可重复性。 make training reproducible
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     random.seed(args.seed)
 
     if args.train_half==1:
+        # 对上半部分的数据进行训练，嵌入以{args.embednaming}结束。
         logging.info(f"train on first half data with embedding ending with {args.embednaming}")
         if 'split1' in args.embednaming:
+            # 错误：前半部分的训练需要split0嵌入文件!
             logging.info('ERROR: train on first half need split0 embedding file!')
 
     elif args.train_half==2:
+        # 对下半部分的数据进行训练，嵌入以{args.embednaming}结束。
         logging.info(f"train on second half data with embedding ending with {args.embednaming}")
         if 'split0' in args.embednaming:
+            # 错误：后半部分的训练需要split1的嵌入文件!
             logging.info('ERROR: train on second half need split1 embedding file!')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    logging.info('Device:%s' % device)
-    logging.info(f"AE model, manifold regularized")
-    logging.info(f"Network params: hidden dim={args.hidden_dim}, manifold embedding dim={args.zdim}")
-    logging.info(f"batch size={args.batch_size}, lr={args.lr}, seed={args.seed}")
-    logging.info(f'save checkpoint: {args.save_model}')
+    logging.info('Device:%s' % device) #设备是什么
+    logging.info(f"AE model, manifold regularized") #AE模型，流形正则化
+    logging.info(f"Network params: hidden dim={args.hidden_dim}, manifold embedding dim={args.zdim}") #网络参数：隐藏dim={args.hidden_dim}，流形嵌入dim={args.zdim}。
+    logging.info(f"batch size={args.batch_size}, lr={args.lr}, seed={args.seed}") #一批的大小batch size， 学习率lr， 种子seed
+    logging.info(f'save checkpoint: {args.save_model}') #保存检查点：{args.save_model}
 
     if args.lam==0:
-        logging.info(f'common embedding regularization not used.')
+        logging.info(f'common embedding regularization not used.') #未使用普通嵌入正则化
     if args.train_half is not None:
         logging.info(f'TR: {train_half[0]}-{train_half[-1]}')
 
@@ -206,23 +214,23 @@ def main():
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     args.input_size = dataset.get_TR_dims()[0]
     embed_size = dataset.get_embed_dims()
-    args.zdim = embed_size # this is to set the manifold embedding shape
+    args.zdim = embed_size #这是为了设置流形嵌入的形状。 this is to set the manifold embedding shape
 
-    logging.info(f"input size={args.input_size}")
-    logging.info(f"manifold embedding size={args.zdim}")
+    logging.info(f"input size={args.input_size}") #输入大小={args.input_size}。
+    logging.info(f"manifold embedding size={args.zdim}") #流形嵌入尺寸={args.zdim}。
 
     encoder, decoders = get_models(args)
     encoder.to(device)
     for i in range(len(decoders)):
         decoders[i].to(device)
 
-    # initialize optimizer
+    # 初始化优化器 initialize optimizer
     params = list(encoder.parameters())
     for decoder in decoders:
         params = params + list(decoder.parameters())
-    optimizer = torch.optim.Adam(params, lr=args.lr)  # either set initial lr or default 0.001
+    optimizer = torch.optim.Adam(params, lr=args.lr)  #要么设置初始lr，要么默认0.001 either set initial lr or default 0.001
 
-    # load pretrained and continue
+    # 加载预训练并继续 load pretrained and continue
     if args.loadpath is not None:
         print(f'loading model from {args.loadpath} at checkpoint epoch {args.load_epoch}')
         checkpoint = torch.load(os.path.join(args.loadpath, f'ae_e{args.load_epoch}.pt'))
@@ -234,10 +242,10 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         logging.info('loaded pretrained model for continue training')
 
-    criterion = torch.nn.MSELoss()  # reconstruction loss criterion
-    mr_criterion = torch.nn.MSELoss() # manifold embedding regularization criterion
+    criterion = torch.nn.MSELoss()  # 重建损失标准 reconstruction loss criterion
+    mr_criterion = torch.nn.MSELoss() # 流形嵌入正则化标准 manifold embedding regularization criterion
 
-    # common latent regularization
+    # 共同的潜规则化 common latent regularization
     reg_criterion = torch.nn.MSELoss()
 
     losses = np.array([])
@@ -272,7 +280,7 @@ def main():
                 embeds = []
                 for i in range(args.n_subjects):
                     set_grad_req(decoders, i)
-                    embed, output = decoders[i](hidden) # here the embed and output are of [T_batch x n_subjects, *] shape
+                    embed, output = decoders[i](hidden) #这里的嵌入和输出是[T_batch x n_subjects, *]的形状。 here the embed and output are of [T_batch x n_subjects, *] shape
                     outputs.append(output.reshape((len(pt_list), -1, args.input_size)))
                     embeds.append(embed.reshape((len(pt_list), -1, args.zdim)))
                 outputs = torch.stack(outputs)
@@ -295,7 +303,7 @@ def main():
                 for z1 in range(1, args.n_subjects):
                     loss_reg += reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[z1]])
             else:
-                for z1 in range(1, args.n_subjects - 1):  # consecutive pairs (cycle)
+                for z1 in range(1, args.n_subjects - 1):  #连续配对(循环) consecutive pairs (cycle)
                     z2 = z1 + 1
                     loss_reg += reg_criterion(hiddens[pt_list[z1]], hiddens[pt_list[z2]])
 
@@ -308,7 +316,7 @@ def main():
                 for i in range(len(param.patient_ids)):
                     translate.append(outputs[i,
                                      np.setxor1d(np.arange(outputs.shape[0]), [i]), :, :])
-                translate = torch.stack(translate)  # shape is 16 x 15 x T_bach , *
+                translate = torch.stack(translate)  # 形状是16 x 15 x T_bach , * 。 shape is 16 x 15 x T_bach , *
                 loss_translate = criterion(translate[:, 0, :, :].reshape(data_batch.shape), data_batch)
                 for i in range(1, translate.shape[1]):
                     loss_translate = loss_translate + criterion(translate[:, i, :, :].reshape(data_batch.shape),
@@ -363,7 +371,7 @@ def main():
                                    optimizer,
                                    os.path.join(param.chkpt_savepath, 'ae_e%d.pt' % epoch),
                                    epoch)
-            logging.info(f'saved checkpoint at epoch{epoch}')
+            logging.info(f'saved checkpoint at epoch{epoch}') #在epoch{epoch}保存的检查点
     
     
     all_losses = np.stack((losses, rconst_losses, manifold_reg_losses, reg_losses), axis=1)

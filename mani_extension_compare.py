@@ -1,3 +1,9 @@
+"""
+用两种方法计算的流形扩展与真值进行比较
+真值：来自每个被试的完整数据集的 phate
+1.从AE隐藏的测试流形
+2. phate地标扩展
+"""
 # compare the manifold extension calculated in 2 ways to the ground truth
 # ground truth: phate from the full datasets for each subject
 # 1. test manifold hidden from AE

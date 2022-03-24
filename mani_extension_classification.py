@@ -1,3 +1,6 @@
+"""
+通过地标和AE检查流形扩展的分类准确性
+"""
 # check the classification accuracy of manifold extension by landmarking and AE
 
 import warnings  # Ignore sklearn future warning
