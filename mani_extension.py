@@ -523,10 +523,12 @@ def main():
                         z2 = z1 + 1
                         loss_reg += reg_criterion(hiddens[pt_list[z1]], hiddens[pt_list[z2]])
 
+            # 重建损失
             loss_reconstruct = criterion(torch.stack(outputs).view(data_batch.shape), data_batch)
-            loss_manifold_reg = mr_criterion(torch.stack(embeds).view(embed_batch.shape), embed_batch )
-
-            loss=loss_reconstruct + args.lam_mani*loss_manifold_reg
+            # 流形损失
+            loss_manifold_reg = mr_criterion(torch.stack(embeds).view(embed_batch.shape), embed_batch)
+            # 总体损失
+            loss = loss_reconstruct + args.lam_mani*loss_manifold_reg
             
             if args.lam > 0:
                 loss += args.lam*loss_reg
