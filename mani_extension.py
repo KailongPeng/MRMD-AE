@@ -147,7 +147,7 @@ def main():
         embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_consec_train_PHATE.npy"
 
     if not os.path.exists(os.path.join(embedpath, f"sub-01_{embednaming}")):
-        print('prepare train embed data')  # 准备训练嵌入数据
+        print('prepare train embed data')  # 使用 phate 准备训练嵌入数据
         for pt in range(1, args.n_subjects + 1):
             # 加载训练数据
             X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
@@ -243,7 +243,7 @@ def main():
 
     criterion = torch.nn.MSELoss()  # 重建损失标准 reconstruction loss criterion
     mr_criterion = torch.nn.MSELoss()  # 流形嵌入正则化标准 manifold embedding regularization criterion
-    reg_criterion = torch.nn.MSELoss()
+    reg_criterion = torch.nn.MSELoss() # 惩罚不同被试的潜伏空间的错位。也就是不同被试之间的批量效应。增大lambda可以对齐不同被试之间的流形。
 
     losses = np.array([])
     rconst_losses = np.array([])
@@ -274,7 +274,7 @@ def main():
                 if args.oneAE:
                     embed, output = decoders[0](hiddens[i])
                 else:
-                    set_grad_req(decoders, i)
+                    set_grad_req(decoders, i) # 为了model_list的每一个模型model_list[idx]的参数parameters都设置一个梯度的要求param.requires_grad = True  set gradient requirement
                     embed, output = decoders[i](hiddens[i])
                 outputs.append(output)
                 embeds.append(embed)
@@ -282,18 +282,19 @@ def main():
             if args.shuffle_reg:
                 random.shuffle(pt_list)
 
-            if args.lam > 0:
+            if args.lam > 0: # 惩罚不同被试的潜伏空间的错位。也就是不同被试之间的批量效应。增大lambda可以对齐不同被试之间的流形。
+
                 loss_reg = reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[1]])
                 if args.reg_ref:
                     for z1 in range(1, len(patient_ids)):
                         loss_reg += reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[z1]])
 
                 else:
-                    for z1 in range(1, len(patient_ids) - 1):  # consecutive pairs (cycle)
+                    for z1 in range(1, len(patient_ids) - 1):  # 比较 所有相邻对的被试的隐藏层的MSE差别。 consecutive pairs (cycle)
                         z2 = z1 + 1
                         loss_reg += reg_criterion(hiddens[pt_list[z1]], hiddens[pt_list[z2]])
 
-            loss_reconstruct = criterion(torch.stack(outputs).view(data_batch.shape), data_batch)
+            loss_reconstruct = criterion(torch.stack(outputs).view(data_batch.shape), data_batch) # 比较原始数据和重建的数据的差别
             loss_manifold_reg = mr_criterion(torch.stack(embeds).view(embed_batch.shape), embed_batch)
 
             loss = loss_reconstruct + args.lam_mani * loss_manifold_reg
@@ -480,7 +481,7 @@ def main():
     reg_losses = np.array([])
     manifold_reg_losses = np.array([])
 
-    pt_list = np.arange(len(patient_ids))
+    pt_list = np.arange(len(patient_ids)) # 被试 病人 的一个ID 列表
 
     for epoch in range(1, args.n_epochs + 1):
         epoch_losses = 0.0
@@ -513,7 +514,7 @@ def main():
                 random.shuffle(pt_list)
 
             if args.lam > 0:
-                loss_reg = reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[1]])
+                loss_reg = reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[1]]) # 比较第一个病人和第二个病人的隐藏层的MSE差别
                 if args.reg_ref:
                     for z1 in range(1, len(patient_ids)):
                         loss_reg += reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[z1]])
