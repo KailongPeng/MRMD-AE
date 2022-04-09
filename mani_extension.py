@@ -149,7 +149,7 @@ def main():
     if not os.path.exists(os.path.join(embedpath, f"sub-01_{embednaming}")):
         print('prepare train embed data')  # 使用 phate 准备训练嵌入数据
         for pt in range(1, args.n_subjects + 1):
-            # 加载训练数据
+            # 加载训练数据dataloader
             X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
 
             # 在训练数据上面训练phate模型为pop，获得训练数据X的特征值X_p
@@ -376,7 +376,7 @@ def main():
 
     if not os.path.exists(os.path.join(embedpath, f"sub-01_{embednaming}")):
         print( 'prepare train embed data') #准备训练嵌入数据
-        for pt in range(1,args.n_subjects+1):
+        for pt in range(1, args.n_subjects+1):
 
             # 加载训练数据
             X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
