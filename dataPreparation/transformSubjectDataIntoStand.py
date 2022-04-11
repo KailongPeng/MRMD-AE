@@ -189,10 +189,10 @@ def transformSubjectDataIntoStand(sub=''):
         jobID+=1
     save_obj(jobIDs, f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/temp/usefunc2stand_{sub}")
     cmd = f"sbatch --requeue --array 1-{len(jobIDs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/usefunc2stand.sh {sub}"
-    sbatch_response = kp_run(cmd);
-    jobID = getjobID_num(sbatch_response);
-    waitForEnd(jobID);
-    check_jobArray(jobID=jobID, jobarrayNumber=len(arrayJobs))
+    sbatch_response = kp_run(cmd)
+    jobID = getjobID_num(sbatch_response)
+    waitForEnd(jobID)
+    check_jobArray(jobID=jobID, jobarrayNumber=len(jobIDs))
 
 
     print("done")

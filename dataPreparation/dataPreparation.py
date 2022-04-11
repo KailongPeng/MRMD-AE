@@ -171,6 +171,7 @@ def main():
     # 获得ROI的mask
     # 最终的结果就是ROI的所有的标准空间中的数据加上行为学的数据
 
+    # 首先把所有的functional的数据全部转移到functional template的空间中
     def alignFunc(sub='', arrayJobs={}):
         transformFolder = f"{subFolder}/{sub}/transform/"
         mkdir(transformFolder)
@@ -219,7 +220,6 @@ def main():
                 print("done")
             # convert_func_to_templateSpace(func_id, func, transformFolder, funcTemplate)
         return arrayJobs
-
     arrayJobs = {}
     for sub in subs:
         arrayJobs = alignFunc(sub=sub, arrayJobs=arrayJobs)
@@ -231,18 +231,18 @@ def main():
     waitForEnd(jobID);
     check_jobArray(jobID=jobID, jobarrayNumber=len(arrayJobs))
 
+    # 把所有的functional的数据转移到标准空间中并且应用mask
     jobIDs = {}
     jobID = 1
     for sub in tqdm(subs):
         jobIDs[jobID] = sub
         jobID += 1
-    save_obj(jobIDs,
-             f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand")
+    save_obj(jobIDs, f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand")
     cmd = f"sbatch --requeue --array 1-{len(jobIDs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand.sh"
     sbatch_response = kp_run(cmd)
     jobID = getjobID_num(sbatch_response)
     waitForEnd(jobID)
-    check_jobArray(jobID=jobID, jobarrayNumber=len(arrayJobs))
+    check_jobArray(jobID=jobID, jobarrayNumber=len(jobIDs))
 
     # 准备对于每一个run内部的图片进行对齐。
     "/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/sub022/behav/"

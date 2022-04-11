@@ -1,0 +1,619 @@
+"""
+    子集时间点Subset timepoints，用于测试被试内的流形扩展
+    在测试的数据片slice上插值interpolate流形嵌入manifold embedding
+    MRMD-AE
+"""
+"""
+    代码逻辑：
+        首先加载需要用到的库
+        然后处理输入的超参数，放进 args 中。
+        在main中
+
+"""
+# Subset timepoints for test manifold extension within subjects
+# interpolate manifold embedding on test slices of data
+# MRMD-AE
+import os
+import warnings  # Ignore sklearn future warning
+import numpy as np
+import pandas as pd
+import argparse
+import torch
+import random
+import phate
+from lib.fMRI import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
+from lib.helper import extract_hidden_reps, get_models, checkexist
+from torch.utils.data import DataLoader
+from lib.utils import set_grad_req
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--seed', type=int, default=0)
+parser.add_argument('--ROI', type=str, default='early_visual')
+parser.add_argument('--n_subjects', type=int, default=16)
+parser.add_argument('--patient', type=int, default=None)
+parser.add_argument('--n_timerange', type=int, default=1976)
+parser.add_argument('--train_percent', type=int, default=90)
+parser.add_argument('--hidden_dim', type=int, default=64)
+parser.add_argument('--zdim', type=int, default=20)
+parser.add_argument('--input_size', type=int, default=None)
+parser.add_argument('--batch_size', type=int, default=64)
+parser.add_argument('--symm',
+                    action='store_true')  # 编码器和解码器使用对称配置，因此，潜伏的编码器尺寸与流形尺寸相同。 use the symmetric config for encoder as decoder, so the latent encoder dim is the same as manifold dim
+parser.add_argument('--lr', type=float, default=0.001)
+parser.add_argument('--lam', type=float, default=0)
+parser.add_argument('--lam_mani', type=float, default=1)
+parser.add_argument('--n_epochs', type=int, default=4000)
+parser.add_argument('--shuffle_reg', action='store_true')
+parser.add_argument('--ind_mrAE', action='store_true',
+                    help='set active to train independent MR-AE')  # 设置为激活，以训练独立的MR-AE
+parser.add_argument('--consecutive_time', action='store_true',
+                    help='set active to make consecutive times e.g. 50% train will be first half of time series')  # 设置活动，使连续的时间，例如，50%的火车将是时间序列的前半部分。
+parser.add_argument('--oneAE', action='store_true', help='use a single autoencoder')  # 使用单一的自动编码器
+parser.add_argument('--reg_ref', action='store_true')
+
+
+def main():
+    args = parser.parse_args()
+
+    # 首先设置重复种子，确保可重复性
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    random.seed(args.seed)
+
+    # 结果应该保存在outfile
+    outfile = 'results/mrmdAE_insubject_mani_extension.csv'
+
+    if args.ind_mrAE:  # 如果使用独立的mr-AE。 if independent mr-AE is used
+        outfile = 'results/ind_mrAE_insubject_mani_extension.csv'
+        if args.patient is None:
+            print(
+                'ERROR: need to specify subject when indepent mrAE is trained, set --pt=?')  # 错误：当独立的mrAE被训练时需要指定被试，设置--pt=?
+            return
+        args.n_subjects = 1
+    if args.oneAE:  # 使用一个编码器一个解码器的设置
+        print('using one encoder one decoder setup')
+        outfile = 'results/oneAE_insubject_mani_extension.csv'
+
+    # 训练的TR的位置
+    path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
+    if args.consecutive_time:  # 是否强调时间的连续性。如果不强调，那就是随机打乱TR
+        path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
+    if not os.path.exists(path_trainTRs):
+        if not args.consecutive_time:
+            trainTRs = np.random.choice(args.n_timerange, int(args.n_timerange * args.train_percent / 100),
+                                        replace=False)
+        else:
+            trainTRs = np.arange(int(args.n_timerange * args.train_percent / 100))
+        trainTRs.sort()
+        np.save(path_trainTRs, trainTRs)
+    else:
+        trainTRs = np.load(path_trainTRs)
+    testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)
+    testTRs.sort()
+
+    embedpath = "./data/mani_extension/data"
+    if not os.path.exists(embedpath):
+        os.makedirs(embedpath)
+
+    datapath = f"data/ROI_data/{args.ROI}/fMRI"
+    datanaming = f"{args.ROI}_sherlock_movie.npy"
+    embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_train_PHATE.npy"
+    if args.consecutive_time:
+        embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_consec_train_PHATE.npy"
+    args = parser.parse_args()
+
+    # 首先设置重复种子，确保可重复性
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    random.seed(args.seed)
+
+    # 结果应该保存在outfile
+    outfile = 'results/mrmdAE_insubject_mani_extension.csv'
+
+    if args.ind_mrAE:  # 如果使用独立的mr-AE。 if independent mr-AE is used
+        outfile = 'results/ind_mrAE_insubject_mani_extension.csv'
+        if args.patient is None:
+            print(
+                'ERROR: need to specify subject when indepent mrAE is trained, set --pt=?')  # 错误：当独立的mrAE被训练时需要指定被试，设置--pt=?
+            return
+        args.n_subjects = 1
+    if args.oneAE:  # 使用一个编码器一个解码器的设置
+        print('using one encoder one decoder setup')
+        outfile = 'results/oneAE_insubject_mani_extension.csv'
+
+    # 训练的TR的位置
+    path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
+    if args.consecutive_time:  # 是否强调时间的连续性。如果不强调，那就是随机打乱TR
+        path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
+    if not os.path.exists(path_trainTRs):
+        if not args.consecutive_time:
+            trainTRs = np.random.choice(args.n_timerange, int(args.n_timerange * args.train_percent / 100),
+                                        replace=False)
+        else:
+            trainTRs = np.arange(int(args.n_timerange * args.train_percent / 100))
+        trainTRs.sort()
+        np.save(path_trainTRs, trainTRs)
+    else:
+        trainTRs = np.load(path_trainTRs)
+    testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)
+    testTRs.sort()
+
+    embedpath = "./data/mani_extension/data"
+    if not os.path.exists(embedpath):
+        os.makedirs(embedpath)
+
+    datapath = f"data/ROI_data/{args.ROI}/fMRI"
+    datanaming = f"{args.ROI}_sherlock_movie.npy"
+    embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_train_PHATE.npy"
+    if args.consecutive_time:
+        embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_consec_train_PHATE.npy"
+
+    if not os.path.exists(os.path.join(embedpath, f"sub-01_{embednaming}")):
+        print('prepare train embed data')  # 使用 phate 准备训练嵌入数据
+        for pt in range(1, args.n_subjects + 1):
+            # 加载训练数据dataloader
+            X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
+
+            # 在训练数据上面训练phate模型为pop，获得训练数据X的特征值X_p
+            pop = phate.PHATE(n_components=args.zdim)
+            X_p = pop.fit_transform(X)
+
+            # 加载测试数据
+            Xtest = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[testTRs]
+
+            # 使用已经训练好的phate模型pop来将测试数据转化到表征空间中
+            Xtest_p = pop.transform(Xtest)
+
+            # 保存训练数据的表征
+            np.save(os.path.join(embedpath, f"sub-{pt:02}_{embednaming}"), X_p)
+
+            # 保存测试数据的表征
+            testphate_file = f"sub-{pt:02}_{embednaming}"
+            testphate_file = testphate_file.replace('_train_', '_test_')
+            np.save(os.path.join(embedpath, testphate_file),
+                    Xtest_p)  # 测试是phate 地标插值 Xtest_p 。 The test is phate landmark interpolation Xtest_p
+
+    savepath = f"./data/mani_extension/models/sherlock_MNI152_3mm_data_{args.ROI}_mani_extend_{args.train_percent}"
+    if args.consecutive_time:
+        savepath = savepath + '_consec'
+    if args.oneAE:
+        savepath = savepath + '_oneAE'
+
+    outdf = None
+    cols = ['ROI', 'hidden_dim', 'zdim', 'lam_mani', 'lam_common', 'symm_design', 'train_percent']
+    entry = [args.ROI, args.hidden_dim, args.zdim, args.lam_mani, args.lam, args.symm, args.train_percent]
+
+    if args.consecutive_time:
+        entry = [args.ROI, args.hidden_dim, args.zdim,
+                 args.lam_mani, args.lam,
+                 args.symm, f"{args.train_percent}_consec"]
+
+    if args.ind_mrAE:  # 培训单独的 mr-AE
+        print('training individual mr-AE')
+        cols.append('subject')
+        entry.append(args.patient)
+
+    if os.path.exists(outfile):
+        outdf_old = pd.read_csv(outfile)
+        exist = checkexist(outdf_old, dict(zip(cols, entry)))
+        if exist:
+            print(f"{entry} exists")
+            return
+        else:
+            print(f"{entry} running")
+    else:
+        outdf_old = None
+
+    patient_ids = np.arange(1, args.n_subjects + 1)
+    if args.ind_mrAE:
+        patient_ids = [args.patient]
+
+    # 加载训练时间点并训练 自动编码器 load training timepoints and train autoencoder
+    dataset = fMRI_Time_Subjs_Embed_Dataset(patient_ids,
+                                            datapath,
+                                            embedpath,
+                                            trainTRs,
+                                            emb_name_suffix=embednaming,
+                                            data_3d=False,
+                                            data_name_suffix=datanaming)
+    if args.input_size is None:
+        args.input_size = dataset.get_TR_dims()[0]
+    if args.input_size != dataset.get_TR_dims()[0]:
+        print('ERROR: input dim and args.input_size not match')  # 错误：输入dim和args.input_size不匹配
+        return
+    if args.zdim is None:
+        args.zdim = dataset.get_embed_dims()
+    if args.zdim != dataset.get_embed_dims():
+        print('ERROR: manifold layer dim and embedding reg dim not match')  # 错误：流形层dim和嵌入reg dim不匹配
+        return
+
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    encoder, decoders = get_models(args)
+    encoder.to(device)
+
+    if args.oneAE:
+        decoders = [
+            decoders[0]]  # 如果使用一个编码器一个解码器的设置，只保留一个解码器。 if use one encoder one decoder setup, keep only one decoder
+
+    for i in range(len(decoders)):
+        decoders[i].to(device)
+    params = list(encoder.parameters())
+    for decoder in decoders:
+        params = params + list(decoder.parameters())
+    optimizer = torch.optim.Adam(params, lr=args.lr)  # 要么设置初始lr，要么默认0.001。 either set initial lr or default 0.001
+
+    criterion = torch.nn.MSELoss()  # 重建损失标准 reconstruction loss criterion
+    mr_criterion = torch.nn.MSELoss()  # 流形嵌入正则化标准 manifold embedding regularization criterion
+    reg_criterion = torch.nn.MSELoss()  # 惩罚不同被试的潜伏空间的错位。也就是不同被试之间的批量效应。增大lambda可以对齐不同被试之间的流形。
+
+    losses = np.array([])
+    rconst_losses = np.array([])
+    reg_losses = np.array([])
+    manifold_reg_losses = np.array([])
+
+    pt_list = np.arange(len(patient_ids))
+
+    for epoch in range(1, args.n_epochs + 1):
+        epoch_losses = 0.0
+        epoch_rconst_losses = 0.0
+        epoch_manifold_reg_losses = 0.0
+        epoch_reg_loss = 0.0
+
+        for data_batch, embed_batch in dataloader:
+            optimizer.zero_grad()
+            current_bs = data_batch.size()[0]
+            data_batch = data_batch.reshape((data_batch.shape[0] * data_batch.shape[1], -1)).float()
+            data_batch = data_batch.to(device)
+            embed_batch = embed_batch.reshape((embed_batch.shape[0] * embed_batch.shape[1], -1)).float()
+            embed_batch = embed_batch.to(device)
+
+            hidden = encoder(data_batch)
+            hiddens = [hidden[i * current_bs:(i + 1) * current_bs] for i in range(len(patient_ids))]
+            outputs = []
+            embeds = []
+            for i in range(len(patient_ids)):
+                if args.oneAE:
+                    embed, output = decoders[0](hiddens[i])
+                else:
+                    set_grad_req(decoders,
+                                 i)  # 为了model_list的每一个模型model_list[idx]的参数parameters都设置一个梯度的要求param.requires_grad = True  set gradient requirement
+                    embed, output = decoders[i](hiddens[i])
+                outputs.append(output)
+                embeds.append(embed)
+
+            if args.shuffle_reg:
+                random.shuffle(pt_list)
+
+            if args.lam > 0:  # 惩罚不同被试的潜伏空间的错位。也就是不同被试之间的批量效应。增大lambda可以对齐不同被试之间的流形。
+
+                loss_reg = reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[1]])
+                if args.reg_ref:
+                    for z1 in range(1, len(patient_ids)):
+                        loss_reg += reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[z1]])
+
+                else:
+                    for z1 in range(1, len(patient_ids) - 1):  # 比较 所有相邻对的被试的隐藏层的MSE差别。 consecutive pairs (cycle)
+                        z2 = z1 + 1
+                        loss_reg += reg_criterion(hiddens[pt_list[z1]], hiddens[pt_list[z2]])
+
+            loss_reconstruct = criterion(torch.stack(outputs).view(data_batch.shape), data_batch)  # 比较原始数据和重建的数据的差别
+            loss_manifold_reg = mr_criterion(torch.stack(embeds).view(embed_batch.shape), embed_batch)
+
+            loss = loss_reconstruct + args.lam_mani * loss_manifold_reg
+
+            if args.lam > 0:
+                loss += args.lam * loss_reg
+
+            loss.backward()
+            optimizer.step()
+
+            epoch_losses += loss.item() * data_batch.size(0)
+            epoch_rconst_losses += loss_reconstruct.item() * data_batch.size(0)
+            epoch_manifold_reg_losses += loss_manifold_reg.item() * data_batch.size(0)
+
+            if args.lam > 0:
+                epoch_reg_loss += loss_reg.item() * data_batch.size(0)
+
+        epoch_losses = epoch_losses / (len(trainTRs) * len(patient_ids))  # 改为报告历时损失。 change to report epoch loss
+        epoch_rconst_losses = epoch_rconst_losses / (len(trainTRs) * len(patient_ids))
+        epoch_manifold_reg_losses = epoch_manifold_reg_losses / (len(trainTRs) * len(patient_ids))
+        epoch_reg_loss = epoch_reg_loss / (len(trainTRs) * len(patient_ids))
+
+        print(
+            f"Epoch {epoch}\tLoss={epoch_losses:.4f}\tloss_rconst={epoch_rconst_losses:.4f}\tloss_manfold_reg={epoch_manifold_reg_losses:.4f}\tloss_reg={epoch_reg_loss:.4f}")
+
+        losses = np.append(losses, epoch_losses)
+        rconst_losses = np.append(rconst_losses, epoch_rconst_losses)
+        manifold_reg_losses = np.append(manifold_reg_losses, epoch_manifold_reg_losses)
+        reg_losses = np.append(reg_losses, epoch_reg_loss)
+
+    all_losses = np.stack((losses, rconst_losses, manifold_reg_losses, reg_losses), axis=1)
+    if not os.path.exists(savepath):
+        os.makedirs(savepath)
+
+    lossfile = f'mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
+    if args.ind_mrAE:
+        lossfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
+    np.save(os.path.join(savepath, lossfile), all_losses)
+
+    modeldict = {'encoder_state_dict': encoder.state_dict()}
+    for i in range(len(decoders)):
+        modeldict[f"decoder_{i}_state_dict"] = decoders[i].state_dict()
+    modeldict['optimizer_state_dict'] = optimizer.state_dict()
+    modeldict['epoch'] = epoch
+
+    ckptfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt"
+    if args.ind_mrAE:
+        ckptfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt'
+    torch.save(modeldict, os.path.join(savepath, ckptfile))
+
+    # 在测试时间点上进行测试，并记录测试嵌入。 test on test timepoints and record the test embeddings
+    dataset = fMRIAutoencoderDataset(patient_ids,
+                                     datapath,
+                                     testTRs,
+                                     data_3d=False,
+                                     data_name_suffix=datanaming)
+    encoder.eval()
+    hidden, al_hidden = extract_hidden_reps(encoder, decoders, dataset, device, None, args)
+    hidden = hidden.reshape(args.n_subjects, len(testTRs), -1)
+
+    if args.ind_mrAE:
+        hidden = hidden.reshape(len(testTRs), -1)
+        hiddenfile = f"ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden.npy"
+    else:
+        hiddenfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden.npy"
+    np.save(os.path.join(savepath, hiddenfile), hidden)
+
+    cols.append('hiddenfile')
+    entry.append(os.path.join(savepath, hiddenfile))
+
+    if outdf is None:
+        outdf = pd.DataFrame(columns=cols)
+    outdf.loc[len(outdf)] = entry
+
+    if os.path.exists(outfile):
+        outdf_old = pd.read_csv(outfile)
+        outdf = pd.concat([outdf_old, outdf])
+    outdf.to_csv(outfile, index=False)
+
+    if not os.path.exists(os.path.join(embedpath, f"sub-01_{embednaming}")):
+        print('prepare train embed data')  # 准备训练嵌入数据
+        for pt in range(1, args.n_subjects + 1):
+            # 加载训练数据
+            X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
+
+            # 在训练数据上面训练phate模型为pop，获得训练数据X的特征值X_p
+            pop = phate.PHATE(n_components=args.zdim)
+            X_p = pop.fit_transform(X)
+
+            # 加载测试数据
+            Xtest = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[testTRs]
+
+            # 使用已经训练好的phate模型pop来将测试数据转化到表征空间中
+            Xtest_p = pop.transform(Xtest)
+
+            # 保存训练数据的表征
+            np.save(os.path.join(embedpath, f"sub-{pt:02}_{embednaming}"), X_p)
+
+            # 保存测试数据的表征
+            testphate_file = f"sub-{pt:02}_{embednaming}"
+            testphate_file = testphate_file.replace('_train_', '_test_')
+            np.save(os.path.join(embedpath, testphate_file),
+                    Xtest_p)  # 测试是phate 地标插值 Xtest_p 。 The test is phate landmark interpolation Xtest_p
+
+    savepath = f"./data/mani_extension/models/sherlock_MNI152_3mm_data_{args.ROI}_mani_extend_{args.train_percent}"
+    if args.consecutive_time:
+        savepath = savepath + '_consec'
+    if args.oneAE:
+        savepath = savepath + '_oneAE'
+
+    outdf = None
+    cols = ['ROI', 'hidden_dim', 'zdim', 'lam_mani', 'lam_common', 'symm_design', 'train_percent']
+    entry = [args.ROI, args.hidden_dim, args.zdim, args.lam_mani, args.lam, args.symm, args.train_percent]
+
+    if args.consecutive_time:
+        entry = [args.ROI, args.hidden_dim, args.zdim,
+                 args.lam_mani, args.lam,
+                 args.symm, f"{args.train_percent}_consec"]
+
+    if args.ind_mrAE:  # 培训单独的 mr-AE
+        print('training individual mr-AE')
+        cols.append('subject')
+        entry.append(args.patient)
+
+    if os.path.exists(outfile):
+        outdf_old = pd.read_csv(outfile)
+        exist = checkexist(outdf_old, dict(zip(cols, entry)))
+        if exist:
+            print(f"{entry} exists")
+            return
+        else:
+            print(f"{entry} running")
+    else:
+        outdf_old = None
+
+    patient_ids = np.arange(1, args.n_subjects + 1)
+    if args.ind_mrAE:
+        patient_ids = [args.patient]
+
+    # 加载训练时间点并训练 自动编码器 load training timepoints and train autoencoder
+    dataset = fMRI_Time_Subjs_Embed_Dataset(patient_ids,
+                                            datapath,
+                                            embedpath,
+                                            trainTRs,
+                                            emb_name_suffix=embednaming,
+                                            data_3d=False,
+                                            data_name_suffix=datanaming)
+    if args.input_size is None:
+        args.input_size = dataset.get_TR_dims()[0]
+    if args.input_size != dataset.get_TR_dims()[0]:
+        print('ERROR: input dim and args.input_size not match')  # 错误：输入dim和args.input_size不匹配
+        return
+    if args.zdim is None:
+        args.zdim = dataset.get_embed_dims()
+    if args.zdim != dataset.get_embed_dims():
+        print('ERROR: manifold layer dim and embedding reg dim not match')  # 错误：流形层dim和嵌入reg dim不匹配
+        return
+
+    # 数据准备
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    # 设备设置
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # 解码器编码器的参数加载
+    encoder, decoders = get_models(args)
+    # 部署模型到设备
+    encoder.to(device)
+
+    if args.oneAE:
+        decoders = [
+            decoders[0]]  # 如果使用一个编码器一个解码器的设置，只保留一个解码器。 if use one encoder one decoder setup, keep only one decoder
+
+    for i in range(len(decoders)):
+        decoders[i].to(device)
+    params = list(encoder.parameters())
+    for decoder in decoders:
+        params = params + list(decoder.parameters())
+    optimizer = torch.optim.Adam(params, lr=args.lr)  # 要么设置初始lr，要么默认0.001。 either set initial lr or default 0.001
+
+    criterion = torch.nn.MSELoss()  # 重建损失标准 reconstruction loss criterion
+    mr_criterion = torch.nn.MSELoss()  # 流形嵌入正则化标准 manifold embedding regularization criterion
+    reg_criterion = torch.nn.MSELoss()
+
+    losses = np.array([])
+    rconst_losses = np.array([])
+    reg_losses = np.array([])
+    manifold_reg_losses = np.array([])
+
+    pt_list = np.arange(len(patient_ids))  # 被试 病人 的一个ID 列表
+
+    for epoch in range(1, args.n_epochs + 1):
+        epoch_losses = 0.0
+        epoch_rconst_losses = 0.0
+        epoch_manifold_reg_losses = 0.0
+        epoch_reg_loss = 0.0
+
+        for data_batch, embed_batch in dataloader:
+            optimizer.zero_grad()  # 对于每一个batch， 初始化优化器
+            current_bs = data_batch.size()[0]
+            data_batch = data_batch.reshape((data_batch.shape[0] * data_batch.shape[1], -1)).float()
+            data_batch = data_batch.to(device)
+            embed_batch = embed_batch.reshape((embed_batch.shape[0] * embed_batch.shape[1], -1)).float()
+            embed_batch = embed_batch.to(device)
+
+            hidden = encoder(data_batch)
+            hiddens = [hidden[i * current_bs:(i + 1) * current_bs] for i in range(len(patient_ids))]
+            outputs = []
+            embeds = []
+            for i in range(len(patient_ids)):
+                if args.oneAE:
+                    embed, output = decoders[0](hiddens[i])
+                else:
+                    set_grad_req(decoders, i)
+                    embed, output = decoders[i](hiddens[i])
+                outputs.append(output)
+                embeds.append(embed)
+
+            if args.shuffle_reg:
+                random.shuffle(pt_list)
+
+            if args.lam > 0:
+                loss_reg = reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[1]])  # 比较第一个病人和第二个病人的隐藏层的MSE差别
+                if args.reg_ref:
+                    for z1 in range(1, len(patient_ids)):
+                        loss_reg += reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[z1]])
+
+                else:
+                    for z1 in range(1, len(patient_ids) - 1):  # consecutive pairs (cycle)
+                        z2 = z1 + 1
+                        loss_reg += reg_criterion(hiddens[pt_list[z1]], hiddens[pt_list[z2]])
+
+            # 重建损失
+            loss_reconstruct = criterion(torch.stack(outputs).view(data_batch.shape), data_batch)
+            # 流形损失
+            loss_manifold_reg = mr_criterion(torch.stack(embeds).view(embed_batch.shape), embed_batch)
+            # 总体损失
+            loss = loss_reconstruct + args.lam_mani * loss_manifold_reg
+
+            if args.lam > 0:
+                loss += args.lam * loss_reg
+
+            loss.backward()
+            optimizer.step()
+
+            epoch_losses += loss.item() * data_batch.size(0)
+            epoch_rconst_losses += loss_reconstruct.item() * data_batch.size(0)
+            epoch_manifold_reg_losses += loss_manifold_reg.item() * data_batch.size(0)
+
+            if args.lam > 0:
+                epoch_reg_loss += loss_reg.item() * data_batch.size(0)
+
+        epoch_losses = epoch_losses / (len(trainTRs) * len(patient_ids))  # 改为报告历时损失。 change to report epoch loss
+        epoch_rconst_losses = epoch_rconst_losses / (len(trainTRs) * len(patient_ids))
+        epoch_manifold_reg_losses = epoch_manifold_reg_losses / (len(trainTRs) * len(patient_ids))
+        epoch_reg_loss = epoch_reg_loss / (len(trainTRs) * len(patient_ids))
+
+        print(
+            f"Epoch {epoch}\tLoss={epoch_losses:.4f}\tloss_rconst={epoch_rconst_losses:.4f}\tloss_manfold_reg={epoch_manifold_reg_losses:.4f}\tloss_reg={epoch_reg_loss:.4f}")
+
+        losses = np.append(losses, epoch_losses)
+        rconst_losses = np.append(rconst_losses, epoch_rconst_losses)
+        manifold_reg_losses = np.append(manifold_reg_losses, epoch_manifold_reg_losses)
+        reg_losses = np.append(reg_losses, epoch_reg_loss)
+
+    all_losses = np.stack((losses, rconst_losses, manifold_reg_losses, reg_losses), axis=1)
+    if not os.path.exists(savepath):
+        os.makedirs(savepath)
+
+    lossfile = f'mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
+    if args.ind_mrAE:
+        lossfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
+    np.save(os.path.join(savepath, lossfile), all_losses)
+
+    modeldict = {'encoder_state_dict': encoder.state_dict()}
+    for i in range(len(decoders)):
+        modeldict[f"decoder_{i}_state_dict"] = decoders[i].state_dict()
+    modeldict['optimizer_state_dict'] = optimizer.state_dict()
+    modeldict['epoch'] = epoch
+
+    ckptfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt"
+    if args.ind_mrAE:
+        ckptfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt'
+    torch.save(modeldict, os.path.join(savepath, ckptfile))
+
+    # 在测试时间点上进行测试，并记录测试嵌入。 test on test timepoints and record the test embeddings
+    dataset = fMRIAutoencoderDataset(patient_ids,
+                                     datapath,
+                                     testTRs,
+                                     data_3d=False,
+                                     data_name_suffix=datanaming)
+    encoder.eval()
+    hidden, al_hidden = extract_hidden_reps(encoder, decoders, dataset, device, None, args)
+    hidden = hidden.reshape(args.n_subjects, len(testTRs), -1)
+
+    if args.ind_mrAE:
+        hidden = hidden.reshape(len(testTRs), -1)
+        hiddenfile = f"ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden.npy"
+    else:
+        hiddenfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden.npy"
+    np.save(os.path.join(savepath, hiddenfile), hidden)
+
+    cols.append('hiddenfile')
+    entry.append(os.path.join(savepath, hiddenfile))
+
+    if outdf is None:
+        outdf = pd.DataFrame(columns=cols)
+    outdf.loc[len(outdf)] = entry
+
+    if os.path.exists(outfile):
+        outdf_old = pd.read_csv(outfile)
+        outdf = pd.concat([outdf_old, outdf])
+    outdf.to_csv(outfile, index=False)
+
+
+if __name__ == '__main__':
+    main()
