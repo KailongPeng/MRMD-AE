@@ -194,10 +194,9 @@ def main():
 
         funcs = glob(f"{subFolder}/{sub}/func/*.nii")
         funcs.sort()
-        for ii, func in enumerate(
-                funcs):  # func = '/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects//sub022/func/sub022_func01.nii'
+        for func in funcs:  # func = '/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects//sub022/func/sub022_func01.nii'
             currJobID = len(arrayJobs) + 1
-            func_id = ii + 1
+            func_id = int(func.split('func')[-1].split('.')[0])  # ii + 1
             arrayJobs[currJobID] = [func_id, func, transformFolder, funcTemplate]
 
             def convert_func_to_templateSpace(func_id, func, transformFolder, funcTemplate):
@@ -220,6 +219,7 @@ def main():
                 print("done")
             # convert_func_to_templateSpace(func_id, func, transformFolder, funcTemplate)
         return arrayJobs
+
     arrayJobs = {}
     for sub in subs:
         arrayJobs = alignFunc(sub=sub, arrayJobs=arrayJobs)
@@ -237,15 +237,18 @@ def main():
     for sub in tqdm(subs):
         jobIDs[jobID] = sub
         jobID += 1
-    save_obj(jobIDs, f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand")
+    save_obj(jobIDs,
+             f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand")
     cmd = f"sbatch --requeue --array 1-{len(jobIDs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand.sh"
     sbatch_response = kp_run(cmd)
     jobID = getjobID_num(sbatch_response)
     waitForEnd(jobID)
     check_jobArray(jobID=jobID, jobarrayNumber=len(jobIDs))
 
-    # 准备对于每一个run内部的图片进行对齐。
-    "/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/sub022/behav/"
+    # 准备对于每一个run内部的图片进行对齐。 不是每一个被试都有8个run，不是所有的图片在一个run中都被展示了8次。
+    # 进行BOLD lag的补偿。
+    behaveFolder = f"/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/{sub}/behav/"
+    behaveFolder
 
 
 if __name__ == '__main__':

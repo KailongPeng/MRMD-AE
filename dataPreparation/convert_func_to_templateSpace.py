@@ -95,7 +95,7 @@ def convert_func_to_templateSpace(func_id,func,transformFolder,funcTemplate):
     cmd = f"mcflirt -in {func} -out {mcFile}" ; kp_run(cmd) ; wait(mcFile)
     func2temp = f"{transformFolder}/run{func_id}_to_template.mat"
     cmd = f"flirt -in {mcFile} -out {transformFolder}/{funcHead}_mc_temporary.nii.gz -ref {funcTemplate} -dof 6 -omat {func2temp}" ; kp_run(cmd) ; wait(func2temp)
-    cmd = f"flirt -in {mcFile} -out {mcFile_template} -ref {funcTemplate} -applyxfm -init {transformFolder}/run{func_id}_to_template.mat" ; kp_run(cmd) ; wait(mcFile_template)
+    cmd = f"flirt -in {mcFile} -out {mcFile_template} -ref {funcTemplate} -applyxfm -init {func2temp}" ; kp_run(cmd) ; wait(mcFile_template)
     kp_remove(f"{transformFolder}/{funcHead}_mc_temporary.nii.gz")
     print("done")
 jobID = int(float(sys.argv[1]))

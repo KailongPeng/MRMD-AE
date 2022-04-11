@@ -106,6 +106,7 @@ def usefunc2stand(sub,funcRun,transformFolder):
     funcRun_inStand_matrix_masked = funcRun_inStand_matrix[mask>0]
     print(f"funcRun_inStand_matrix_masked.shape={funcRun_inStand_matrix_masked.shape}")
     funcRun_inStand_masked = f"{transformFolder}/{name}_inStand_masked"
+    print(f"save to {funcRun_inStand_masked}")
     np.save(funcRun_inStand_masked, funcRun_inStand_matrix_masked)
 
     print("done")

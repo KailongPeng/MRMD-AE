@@ -158,19 +158,25 @@ def transformSubjectDataIntoStand(sub=''):
     anatInStand = f"{transformFolder}/anatInStand.nii.gz"
 
     # 获得func2anat
-    cmd = f"flirt -in {func} -out {funcInAnat} -ref {anat} -omat {func2anat} -dof 6" ; kp_run(cmd)
+    cmd = f"flirt -in {func} -out {funcInAnat} -ref {anat} -omat {func2anat} -dof 6";
+    kp_run(cmd)
 
     # 获得anat2stand
-    cmd = f"flirt -in {anat} -out {anatInStand} -ref {stand} -omat {anat2stand}" ; kp_run(cmd)
+    cmd = f"flirt -in {anat} -out {anatInStand} -ref {stand} -omat {anat2stand}";
+    kp_run(cmd)
 
     # 获得func2stand
-    cmd = f"convert_xfm -omat {func2stand} -concat {func2anat} {anat2stand}" ; kp_run(cmd)
+    cmd = f"convert_xfm -omat {func2stand} -concat {func2anat} {anat2stand}";
+    kp_run(cmd)
 
     # 使用func2stand
-    mask = nib.load("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/early_visual_association-test_z_FDR_0.01.nii.gz").get_fdata() ;
+    mask = nib.load(
+        "/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/early_visual_association-test_z_FDR_0.01.nii.gz").get_fdata();
     mask[mask > 0] = 1
-    print(f"mask.shape={mask.shape}") ; print(f"np.sum(mask)={np.sum(mask)}")
-    funcs = glob(f"{transformFolder}/*_mc_template.nii.gz") ; funcs.sort()   #sub022_func04.nii
+    print(f"mask.shape={mask.shape}");
+    print(f"np.sum(mask)={np.sum(mask)}")
+    funcs = glob(f"{transformFolder}/*_mc_template.nii.gz");
+    funcs.sort()  # sub022_func04.nii
     # for funcRun in funcs:
     #     name = funcRun.split('/')[-1].split('.')[0]
     #     print(f"{sub} {name}")
@@ -182,23 +188,25 @@ def transformSubjectDataIntoStand(sub=''):
     #     print(f"funcRun_inStand_matrix_masked.shape={funcRun_inStand_matrix_masked.shape}")
     #     funcRun_inStand_masked = f"{transformFolder}/{name}_inStand_masked"
     #     np.save(funcRun_inStand_masked, funcRun_inStand_matrix_masked)
-    jobIDs={}
+    jobIDs = {}
     jobID = 1
     for funcRun in funcs:
-        jobIDs[jobID] = [sub,funcRun,transformFolder]
-        jobID+=1
-    save_obj(jobIDs, f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/temp/usefunc2stand_{sub}")
+        jobIDs[jobID] = [sub, funcRun, transformFolder]
+        jobID += 1
+    save_obj(jobIDs,
+             f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/temp/usefunc2stand_{sub}")
     cmd = f"sbatch --requeue --array 1-{len(jobIDs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/usefunc2stand.sh {sub}"
     sbatch_response = kp_run(cmd)
     jobID = getjobID_num(sbatch_response)
     waitForEnd(jobID)
     check_jobArray(jobID=jobID, jobarrayNumber=len(jobIDs))
 
-
     print("done")
 
+
 jobID = int(float(sys.argv[1]))
-arrayJobs = load_obj(f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand")
+arrayJobs = load_obj(
+    f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/transformSubjectDataIntoStand")
 sub = arrayJobs[jobID]
 print(f"sub={sub}")
 transformSubjectDataIntoStand(sub=sub)
