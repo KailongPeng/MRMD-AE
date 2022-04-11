@@ -42,7 +42,10 @@ def kp_run(cmd):
     print(cmd)
     sbatch_response = subprocess.getoutput(cmd)
     check(sbatch_response)
-    jobID = getjobID_num(sbatch_response)
+    try:
+        jobID = getjobID_num(sbatch_response)
+    except:
+        jobID = None
     return jobID
 def kp_remove(fileName):
     cmd=f"rm {fileName}"

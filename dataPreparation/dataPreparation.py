@@ -12,6 +12,7 @@ import nibabel as nib
 from tqdm import tqdm
 import sys
 import pickle5 as pickle
+import time
 sys.path.append("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
 os.chdir("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
 # import phate
@@ -86,6 +87,20 @@ def check_jobArray(jobID='',jobarrayNumber=10):
         jobIDs.append(f"{jobID}_{arrayID}")
     completed = check_jobIDs(jobIDs)
     return completed
+def waitForEnd(jobID):
+    while jobID_running_myjobs(jobID):
+        print(f"waiting for {jobID} to end")
+        time.sleep(5)
+    print(f"{jobID} finished")
+
+def jobID_running_myjobs(jobID):
+    jobID = str(jobID)
+    cmd="squeue -u kp578"
+    sbatch_response = subprocess.getoutput(cmd)
+    if jobID in sbatch_response:
+        return True
+    else:
+        return False
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type = int, default=0)
 parser.add_argument('--ROI', type = str, default = 'early_visual')
@@ -171,43 +186,28 @@ def main():
     for sub in subs:
         arrayJobs = alignFunc(sub=sub, arrayJobs=arrayJobs)
     save_obj(arrayJobs, f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/convert_func_to_templateSpace")
-    cmd = f"sbatch --requeue --array=1-{len(arrayJobs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/convert_func_to_templateSpace.sh " ; jobID = kp_run(cmd) ; check_jobArray(jobID=jobID,jobarrayNumber=len(arrayJobs))
+    cmd = f"sbatch --requeue --array=1-{len(arrayJobs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/convert_func_to_templateSpace.sh " ; jobID = kp_run(cmd) ; waitForEnd(jobID) ; check_jobArray(jobID=jobID,jobarrayNumber=len(arrayJobs))
 
-
-    def transformSubjectDataIntoStand(sub='',arrayJobs={}):
-        # transformFolder = f"{subFolder}/{sub}/transform/"
-        # mkdir(transformFolder)
-
-        # 首先把所有的functional的数据全部都进行运动校正，然后选出一个模板。
-        # def saveMiddleVolumeAsTemplate(funcFolder='', transformFolder=''): # /gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/sub022/func/sub022_func01.nii
-        #     func1head='_func01'
-        #     nii = nib.load(f"{funcFolder}/{func1head}.nii")
-        #     frame = nii.get_fdata()
-        #     TR_number = frame.shape[3]
-        #     frame = frame[:, :, :, int(TR_number / 2)]
-        #     frame = nib.Nifti1Image(frame, affine=nii.affine)
-        #     template = f"{transformFolder}/{func1head}_template"
-        #     nib.save(frame, template)
-        #     return template
-        # funcTemplate = saveMiddleVolumeAsTemplate(funcFolder=f"{subFolder}/{sub}/func/", transformFolder=transformFolder) # 把 第一个 run 的中间的volume作为 模板
-
+    def transformSubjectDataIntoStand(sub='',arrayJobs={},funcTemplate=''):
+        transformFolder = f"{subFolder}/{sub}/transform/"
         funcs = glob(f"{subFolder}/{sub}/func/*.nii")
         funcs.sort()
-        for func_id, func in enumerate(funcs): # func = '/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects//sub022/func/sub022_func01.nii'
-            currJobID = len(arrayJobs)+1
-            arrayJobs[currJobID] = [func_id, func, transformFolder]
-            # def convert_func_to_templateSpace(func_id,func,transformFolder):
-            #     funcHead = func.split('/')[-1].split('.')[0] # funcHead = 'sub022_func01'
-            #     mcFile = f"{transformFolder}/{funcHead}_mc.nii.gz"
-            #     kp_remove(mcFile)
-            #     mcFile_template = f"{transformFolder}/{funcHead}_mc_template.nii.gz"
-            #     cmd = f"mcflirt -in {func} -out {mcFile}" ; kp_run(cmd) ; wait(mcFile)
-            #     func2temp = f"{transformFolder}/run{func_id}_to_template.mat"
-            #     cmd = f"flirt -in {mcFile} -out {transformFolder}/{funcHead}_mc_temporary.nii.gz -ref {funcTemplate} -dof 6 -omat {func2temp}" ; kp_run(cmd) ; wait(func2temp)
-            #     cmd = f"flirt -in {mcFile} -out {mcFile_template} -ref {funcTemplate} -applyxfm -init {transformFolder}/run{func_id}_to_template.mat" ; kp_run(cmd) ; wait(mcFile_template)
-            #     kp_remove(f"{transformFolder}/{funcHead}_mc_temporary.nii.gz")
-            # convert_func_to_templateSpace(func_id, func)
-        return arrayJobs
+        # for func_id, func in enumerate(funcs): # func = '/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects//sub022/func/sub022_func01.nii'
+        #     currJobID = len(arrayJobs)+1
+        #     arrayJobs[currJobID] = [func_id, func, transformFolder]
+        #     # def convert_func_to_templateSpace(func_id,func,transformFolder):
+        #     #     funcHead = func.split('/')[-1].split('.')[0] # funcHead = 'sub022_func01'
+        #     #     mcFile = f"{transformFolder}/{funcHead}_mc.nii.gz"
+        #     #     kp_remove(mcFile)
+        #     #     mcFile_template = f"{transformFolder}/{funcHead}_mc_template.nii.gz"
+        #     #     cmd = f"mcflirt -in {func} -out {mcFile}" ; kp_run(cmd) ; wait(mcFile)
+        #     #     func2temp = f"{transformFolder}/run{func_id}_to_template.mat"
+        #     #     cmd = f"flirt -in {mcFile} -out {transformFolder}/{funcHead}_mc_temporary.nii.gz -ref {funcTemplate} -dof 6 -omat {func2temp}" ; kp_run(cmd) ; wait(func2temp)
+        #     #     cmd = f"flirt -in {mcFile} -out {mcFile_template} -ref {funcTemplate} -applyxfm -init {transformFolder}/run{func_id}_to_template.mat" ; kp_run(cmd) ; wait(mcFile_template)
+        #     #     kp_remove(f"{transformFolder}/{funcHead}_mc_temporary.nii.gz")
+        #     # convert_func_to_templateSpace(func_id, func)
+        # return arrayJobs
+
 
 
         func2anat = f"{transformFolder}/func2anat.mat"
