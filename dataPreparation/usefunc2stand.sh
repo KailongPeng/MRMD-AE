@@ -3,7 +3,7 @@
 #SBATCH --job-name usefunc2stand
 #SBATCH --partition=psych_day,psych_scavenge,psych_week,day,week
 #SBATCH --time=2:00:00 #20:00:00
-##SBATCH --mem=10000
+#SBATCH --mem=10GB
 ##SBATCH -n 5
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=kp578
