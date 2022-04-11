@@ -33,7 +33,7 @@ def mkdir(folder):
         os.mkdir(folder)
 def check(sbatch_response):
     print(sbatch_response)
-    if "Exception" in sbatch_response or "Error" in sbatch_response or "Failed" in sbatch_response or "not" in sbatch_response:
+    if "Exception" in sbatch_response or "Error" in sbatch_response or "Failed" in sbatch_response or "not" in sbatch_response or 'Unrecognised' in sbatch_response:
         raise Exception(sbatch_response)
 def getjobID_num(sbatch_response): # 根据subprocess.Popen输出的proc，获得sbatch的jpobID
     import re
@@ -43,11 +43,7 @@ def kp_run(cmd):
     print(cmd)
     sbatch_response = subprocess.getoutput(cmd)
     check(sbatch_response)
-    try:
-        jobID = getjobID_num(sbatch_response)
-    except:
-        jobID = None
-    return jobID
+    return sbatch_response
 def kp_remove(fileName):
     cmd=f"rm {fileName}"
     print(cmd)
@@ -186,14 +182,15 @@ def main():
     for sub in subs:
         arrayJobs = alignFunc(sub=sub, arrayJobs=arrayJobs)
     save_obj(arrayJobs, f"/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/convert_func_to_templateSpace")
-    cmd = f"sbatch --requeue --array=1-{len(arrayJobs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/convert_func_to_templateSpace.sh " ; jobID = kp_run(cmd) ; waitForEnd(jobID) ; check_jobArray(jobID=jobID,jobarrayNumber=len(arrayJobs))
+    cmd = f"sbatch --requeue --array=1-{len(arrayJobs)} /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/convert_func_to_templateSpace.sh " ;
+    sbatch_response = kp_run(cmd) ; jobID = getjobID_num(sbatch_response) ; waitForEnd(jobID) ; check_jobArray(jobID=jobID,jobarrayNumber=len(arrayJobs))
 
-    def transformSubjectDataIntoStand(sub='',arrayJobs={},funcTemplate=''):
+    def transformSubjectDataIntoStand(sub=''):
         transformFolder = f"{subFolder}/{sub}/transform/"
-
+        funcTemplate = f"{transformFolder}/{sub}_func01_template.nii"
         func2anat = f"{transformFolder}/func2anat.mat"
         anat2stand = f"{transformFolder}/anat2stand.mat"
-        func2stand = f"{transformFolder}/func2stand.nii.gz"
+        func2stand = f"{transformFolder}/func2stand.mat"
 
         func = funcTemplate
         anat = f"{subFolder}/{sub}/anat/{sub}_t1_bet.nii.gz"
@@ -211,15 +208,16 @@ def main():
         cmd = f"convert_xfm -omat {func2stand} -concat {func2anat} {anat2stand}" ; kp_run(cmd)
 
         # 使用func2stand
-        mask = nib.load("early_visual_association-test_z_FDR_0.01.nii.gz").get.fdata() ; print(f"mask.shape={mask.shape}") ; print(f"np.sum(mask)={np.sum(mask)}")
+        mask = nib.load("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/dataPreparation/early_visual_association-test_z_FDR_0.01.nii.gz").get_fdata() ;
+        print(f"mask.shape={mask.shape}") ; print(f"np.sum(mask)={np.sum(mask)}")
         funcs = glob(f"{transformFolder}/*_mc_template.nii.gz") ; funcs.sort()   #sub022_func04.nii
         for funcRun in funcs:
             name = funcRun.split('/')[-1].split('.')[0]
             print(f"{sub} {name}")
-            funcRun_inStand = f"{transformFolder}/{name}_inStand"
+            funcRun_inStand = f"{transformFolder}/{name}_inStand.nii.gz"
             cmd = f"flirt -in {funcRun} -out {funcRun_inStand} -ref {stand} -applyxfm -init {func2stand}" ; kp_run(cmd)
             # 使用mask
-            funcRun_inStand_matrix = nib.load(funcRun_inStand).get.fdata()
+            funcRun_inStand_matrix = nib.load(funcRun_inStand).get_fdata()
             funcRun_inStand_matrix_masked = funcRun_inStand_matrix[mask]
             print(f"funcRun_inStand_matrix_masked.shape={funcRun_inStand_matrix_masked.shape}")
             funcRun_inStand_masked = f"{transformFolder}/{name}_inStand_masked"
@@ -228,6 +226,8 @@ def main():
     for sub in tqdm(subs):
         transformSubjectDataIntoStand(sub=sub)
 
+    # 准备对于每一个run内部的图片进行对齐。
+    "/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/sub022/behav/"
 
 if __name__=='__main__':
     main()
