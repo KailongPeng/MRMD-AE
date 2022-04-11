@@ -1,4 +1,4 @@
-testMode=True
+testMode = True
 import os
 import warnings  # Ignore sklearn future warning
 import numpy as np
@@ -12,6 +12,8 @@ import nibabel as nib
 from tqdm import tqdm
 import sys
 import pickle5 as pickle
+import time
+
 sys.path.append("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
 os.chdir("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
 # import phate
@@ -20,71 +22,113 @@ os.chdir("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
 # from torch.utils.data import DataLoader
 # from lib.utils import set_grad_req
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
+
 def save_obj(obj, name):
     with open(name + '.pkl', 'wb') as f:
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 
+
 def load_obj(name):
     with open(name + '.pkl', 'rb') as f:
         return pickle.load(f)
+
+
 def mkdir(folder):
     if not os.path.isdir(folder):
         os.mkdir(folder)
+
+
 def check(sbatch_response):
     print(sbatch_response)
-    if "Exception" in sbatch_response or "Error" in sbatch_response or "Failed" in sbatch_response or "not" in sbatch_response:
+    if "Exception" in sbatch_response or "Error" in sbatch_response or "Failed" in sbatch_response or "not" in sbatch_response or 'Unrecognised' in sbatch_response:
         raise Exception(sbatch_response)
-def getjobID_num(sbatch_response): # 根据subprocess.Popen输出的proc，获得sbatch的jpobID
+
+
+def getjobID_num(sbatch_response):  # 根据subprocess.Popen输出的proc，获得sbatch的jpobID
     import re
     jobID = re.findall(r'\d+', sbatch_response)[0]
     return jobID
+
+
 def kp_run(cmd):
     print(cmd)
     sbatch_response = subprocess.getoutput(cmd)
     check(sbatch_response)
     return sbatch_response
+
+
 def kp_remove(fileName):
-    cmd=f"rm {fileName}"
+    cmd = f"rm {fileName}"
     print(cmd)
     sbatch_response = subprocess.getoutput(cmd)
     print(sbatch_response)
-def wait(tmpFile,waitFor=0.1):
+
+
+def wait(tmpFile, waitFor=0.1):
     while not os.path.exists(tmpFile):
         time.sleep(waitFor)
     return 1
+
+
 def check(sbatch_response):
     print(sbatch_response)
     if "Exception" in sbatch_response or "Error" in sbatch_response or "Failed" in sbatch_response or "not" in sbatch_response:
         raise Exception(sbatch_response)
+
+
 def checkEndwithDone(filename):
     with open(filename, 'r') as f:
         last_line = f.readlines()[-1]
-    return last_line=="done\n"
+    return last_line == "done\n"
+
+
 def checkDone(jobIDs):
-    completed={}
+    completed = {}
     for jobID in jobIDs:
         filename = f"./logs/{jobID}.out"
         completed[jobID] = checkEndwithDone(filename)
-    if np.mean(list(completed.values()))==1:
+    if np.mean(list(completed.values())) == 1:
         status = True
     else:
         status = False
     return completed, status
+
+
 def check_jobIDs(jobIDs):
     completed, status = checkDone(jobIDs)
-    if status==True:
+    if status == True:
         pass
     else:
         print(completed)
-        assert status==True
+        assert status == True
     return completed
-def check_jobArray(jobID='',jobarrayNumber=10):
-    arrayIDrange=np.arange(1,1+jobarrayNumber)
-    jobIDs=[]
+
+
+def check_jobArray(jobID='', jobarrayNumber=10):
+    arrayIDrange = np.arange(1, 1 + jobarrayNumber)
+    jobIDs = []
     for arrayID in arrayIDrange:
         jobIDs.append(f"{jobID}_{arrayID}")
     completed = check_jobIDs(jobIDs)
     return completed
+
+
+def waitForEnd(jobID):
+    while jobID_running_myjobs(jobID):
+        print(f"waiting for {jobID} to end")
+        time.sleep(5)
+    print(f"{jobID} finished")
+
+
+def jobID_running_myjobs(jobID):
+    jobID = str(jobID)
+    cmd = "squeue -u kp578"
+    sbatch_response = subprocess.getoutput(cmd)
+    if jobID in sbatch_response:
+        return True
+    else:
+        return False
 
 def convert_func_to_templateSpace(func_id,func,transformFolder,funcTemplate):
     funcHead = func.split('/')[-1].split('.')[0] # funcHead = 'sub022_func01'
