@@ -43,7 +43,10 @@ def kp_run(cmd):
     print(cmd)
     sbatch_response = subprocess.getoutput(cmd)
     check(sbatch_response)
-    jobID = getjobID_num(sbatch_response)
+    try:
+        jobID = getjobID_num(sbatch_response)
+    except:
+        jobID = None
     return jobID
 def kp_remove(fileName):
     cmd=f"rm {fileName}"
@@ -113,8 +116,6 @@ def main():
 
     # 首先设置重复种子，确保可重复性
     np.random.seed(args.seed)
-    # torch.manual_seed(args.seed)
-    # torch.cuda.manual_seed_all(args.seed)
     random.seed(args.seed)
 
     subFolder = "/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/"
@@ -181,7 +182,6 @@ def main():
                 print("done")
             # convert_func_to_templateSpace(func_id, func, transformFolder, funcTemplate)
         return arrayJobs
-
     arrayJobs = {}
     for sub in subs:
         arrayJobs = alignFunc(sub=sub, arrayJobs=arrayJobs)
@@ -190,38 +190,19 @@ def main():
 
     def transformSubjectDataIntoStand(sub='',arrayJobs={},funcTemplate=''):
         transformFolder = f"{subFolder}/{sub}/transform/"
-        funcs = glob(f"{subFolder}/{sub}/func/*.nii")
-        funcs.sort()
-        # for func_id, func in enumerate(funcs): # func = '/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects//sub022/func/sub022_func01.nii'
-        #     currJobID = len(arrayJobs)+1
-        #     arrayJobs[currJobID] = [func_id, func, transformFolder]
-        #     # def convert_func_to_templateSpace(func_id,func,transformFolder):
-        #     #     funcHead = func.split('/')[-1].split('.')[0] # funcHead = 'sub022_func01'
-        #     #     mcFile = f"{transformFolder}/{funcHead}_mc.nii.gz"
-        #     #     kp_remove(mcFile)
-        #     #     mcFile_template = f"{transformFolder}/{funcHead}_mc_template.nii.gz"
-        #     #     cmd = f"mcflirt -in {func} -out {mcFile}" ; kp_run(cmd) ; wait(mcFile)
-        #     #     func2temp = f"{transformFolder}/run{func_id}_to_template.mat"
-        #     #     cmd = f"flirt -in {mcFile} -out {transformFolder}/{funcHead}_mc_temporary.nii.gz -ref {funcTemplate} -dof 6 -omat {func2temp}" ; kp_run(cmd) ; wait(func2temp)
-        #     #     cmd = f"flirt -in {mcFile} -out {mcFile_template} -ref {funcTemplate} -applyxfm -init {transformFolder}/run{func_id}_to_template.mat" ; kp_run(cmd) ; wait(mcFile_template)
-        #     #     kp_remove(f"{transformFolder}/{funcHead}_mc_temporary.nii.gz")
-        #     # convert_func_to_templateSpace(func_id, func)
-        # return arrayJobs
-
-
 
         func2anat = f"{transformFolder}/func2anat.mat"
         anat2stand = f"{transformFolder}/anat2stand.mat"
         func2stand = f"{transformFolder}/func2stand.nii.gz"
 
-        func = f"{subFolder}/{sub}/func/functionalTemplate.nii.gz"
+        func = funcTemplate
         anat = f"{subFolder}/{sub}/anat/{sub}_t1_bet.nii.gz"
         stand = '/gpfs/milgram/apps/hpc.rhel7/software/FSL/5.0.10-centos7_64/data/standard/MNI152_T1_2mm_brain.nii.gz'
         funcInAnat = f"{transformFolder}/funcInAnat.nii.gz"
         anatInStand = f"{transformFolder}/anatInStand.nii.gz"
 
         # 获得func2anat
-        cmd = f"flirt -in {func} -out {funcInAnat} -ref {anat} -omat {func2anat}" ; kp_run(cmd)
+        cmd = f"flirt -in {func} -out {funcInAnat} -ref {anat} -omat {func2anat} -dof 6" ; kp_run(cmd)
 
         # 获得anat2stand
         cmd = f"flirt -in {anat} -out {anatInStand} -ref {stand} -omat {anat2stand}" ; kp_run(cmd)
@@ -231,17 +212,17 @@ def main():
 
         # 使用func2stand
         mask = nib.load("early_visual_association-test_z_FDR_0.01.nii.gz").get.fdata() ; print(f"mask.shape={mask.shape}") ; print(f"np.sum(mask)={np.sum(mask)}")
-        funcs = glob(f"{subFolder}/{sub}/func/*.nii") ; funcs.sort()   #sub022_func04.nii
+        funcs = glob(f"{transformFolder}/*_mc_template.nii.gz") ; funcs.sort()   #sub022_func04.nii
         for funcRun in funcs:
             name = funcRun.split('/')[-1].split('.')[0]
             print(f"{sub} {name}")
-            funcRun_inStand = f"{subFolder}/{sub}/func/{name}_inStand"
+            funcRun_inStand = f"{transformFolder}/{name}_inStand"
             cmd = f"flirt -in {funcRun} -out {funcRun_inStand} -ref {stand} -applyxfm -init {func2stand}" ; kp_run(cmd)
             # 使用mask
             funcRun_inStand_matrix = nib.load(funcRun_inStand).get.fdata()
             funcRun_inStand_matrix_masked = funcRun_inStand_matrix[mask]
             print(f"funcRun_inStand_matrix_masked.shape={funcRun_inStand_matrix_masked.shape}")
-            funcRun_inStand_masked = f"{subFolder}/{sub}/func/{name}_inStand_masked"
+            funcRun_inStand_masked = f"{transformFolder}/{name}_inStand_masked"
             np.save(funcRun_inStand_matrix_masked, funcRun_inStand_masked)
 
     for sub in tqdm(subs):

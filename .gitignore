@@ -130,3 +130,14 @@ dmypy.json
 
 data/
 archive/
+*.nii
+*.nii.gz
+
+
+
+
+
+
+
+
+
