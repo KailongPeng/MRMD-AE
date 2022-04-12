@@ -246,9 +246,112 @@ def main():
     check_jobArray(jobID=jobID, jobarrayNumber=len(jobIDs))
 
     # 准备对于每一个run内部的图片进行对齐。 不是每一个被试都有8个run，不是所有的图片在一个run中都被展示了8次。
-    # 进行BOLD lag的补偿。
-    behaveFolder = f"/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/{sub}/behav/"
-    behaveFolder
+    # 同时进行BOLD lag的补偿。
+    def sort_align_behav_brain():
+
+        import string
+        alphabet = string.ascii_uppercase
+
+        def convertItemColumn(ShownImages):
+            ShownImages_ = []
+            for image in ShownImages:
+                type(image)
+                if type(image) == str:
+                    imageID = alphabet.index(image) + 1
+                    ShownImages_.append(imageID)
+                elif type(image) == float:
+                    ShownImages_.append(0)
+            return np.asarray(ShownImages_)
+
+        def loadBrainData(behavFile):
+            run_ID = behavFile.split('_')[-1].split('.')[0]
+            brain = np.load(
+                f"/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/{sub}/transform/{sub}_func0{run_ID}_mc_template_inStand_masked.npy")
+            brain = brain.T
+            print(f"brain.shape={brain.shape}")
+            # 最简单的解决BOLD lag的方法就是把functional的数据的前三个TR都丢掉。
+            brain = brain[3:, :]
+            print(f"brain.shape={brain.shape}")
+            return brain
+
+        def complete5ID(ID):  # 对于sub019 的第五个run，第四张图片展示了4次，第七张图片展示了3次。此时需要补齐5个ID才可以。
+            completeID = []
+            for ii in range(5):
+                try:
+                    completeID.append(ID[ii])
+                except:
+                    completeID.append(None)
+            return np.asarray(completeID)
+
+        def reSortBasedOnImages(ShownImages):
+            IDs = 0
+            for image in range(1, 17):
+                ID = np.where(ShownImages == image)[0]
+                ID = complete5ID(ID)
+                IDs = ID if image == 1 else np.concatenate([IDs, ID], axis=0)
+            ID = np.where(ShownImages == 0)[0]
+            IDs = np.concatenate([IDs, ID], axis=0)
+            return IDs
+
+        subFolder = "/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/"
+        subs = glob(f"{subFolder}/sub*")
+        subs.sort()
+        subs = [sub.split("/")[-1] for sub in subs]
+        for sub in tqdm(subs):
+            behavFolder = f"/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/{sub}/behav/???_?.csv"
+            behavFiles = glob(behavFolder)
+            behavFiles.sort()
+            for behavFile in behavFiles:
+                runID = behavFile.split('_')[-1].split('.')[0]
+                brain = loadBrainData(behavFile)
+                behav = pd.read_csv(behavFile)
+                ShownImages = convertItemColumn(list(behav.Item))
+                print(f"brain.shape[0]={brain.shape[0]} len(ShownImages)={len(ShownImages)}")
+                if brain.shape[0] < len(ShownImages):  # 一般来说是行为学的数据长于大脑数据，此时删除部分行为学数据
+                    ShownImages = ShownImages[:brain.shape[0]]
+                    print('行为学数据长')
+                else:  # 偶尔也会行为学的数据短于大脑数据，此时删除部分大脑数据。
+                    brain = brain[:len(ShownImages)]
+
+                assert len(ShownImages) == brain.shape[0]
+                IDs = reSortBasedOnImages(ShownImages)
+                if np.sum((1 * (IDs == None))) == 0:
+                    IDs = IDs.astype(int)
+                    brain = brain[IDs, :]
+                else:
+                    IDs = reSortBasedOnImages(ShownImages)
+                    resortedBrain = []
+                    for ID in IDs:
+                        if ID is None:
+                            temp = brain[0, :]
+                            temp[:] = None
+                            resortedBrain.append(temp)
+                        else:
+                            resortedBrain.append(brain[ID, :])
+                    brain = np.asarray(resortedBrain)
+
+                np.save(f"{subFolder}/{sub}/transform/{sub}_brain_run{runID}", brain)
+                np.save(f"{subFolder}/{sub}/transform/{sub}_behav_run{runID}", IDs)
+
+    sort_align_behav_brain()
+
+    def scpfiles():
+        import subprocess,os
+        def kp_run(cmd):
+            print(cmd)
+            sbatch_response = subprocess.getoutput(cmd)
+            print(sbatch_response)
+            return sbatch_response
+
+        def mkdir(folder):
+            if not os.path.isdir(folder):
+                cmd = f"mkdir -p {folder}"
+                sbatch_response = subprocess.getoutput(cmd)
+                print(sbatch_response)
+        "cd /gpfs/milgram/project/turk-browne/projects/localize/analysis/ ; mkdir temp"
+        "rsync -a subjects/sub0??/transform/sub0??_behav_run?.npy temp/"
+        "rsync -a subjects/sub0??/transform/sub0??_brain_run?.npy temp/"
+        "scp kp578@milgram.hpc.yale.edu:/gpfs/milgram/project/turk-browne/projects/localize/analysis/temp/* /Users/kailong/Desktop/MRMD-AE/MRMD-AE/data/localize"
 
 
 if __name__ == '__main__':
