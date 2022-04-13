@@ -134,7 +134,7 @@ archive/
 *.nii.gz
 *.xml
 *.iml
-
+PHATE/
 
 
 
