@@ -284,14 +284,16 @@ def main():
             return np.asarray(completeID)
 
         def reSortBasedOnImages(ShownImages):
+            reSortedLabels = []
             IDs = 0
             for image in range(1, 17):
                 ID = np.where(ShownImages == image)[0]
                 ID = complete5ID(ID)
+                reSortedLabels = reSortedLabels + 5*[image]
                 IDs = ID if image == 1 else np.concatenate([IDs, ID], axis=0)
             ID = np.where(ShownImages == 0)[0]
             IDs = np.concatenate([IDs, ID], axis=0)
-            return IDs
+            return IDs, reSortedLabels
 
         subFolder = "/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/"
         subs = glob(f"{subFolder}/sub*")
@@ -314,12 +316,13 @@ def main():
                     brain = brain[:len(ShownImages)]
 
                 assert len(ShownImages) == brain.shape[0]
-                IDs = reSortBasedOnImages(ShownImages)
+                IDs, reSortedLabels = reSortBasedOnImages(ShownImages)
+                print(f"IDs={IDs}")
+                print(f"reSortedLabels={reSortedLabels}")
                 if np.sum((1 * (IDs == None))) == 0:
                     IDs = IDs.astype(int)
                     brain = brain[IDs, :]
                 else:
-                    IDs = reSortBasedOnImages(ShownImages)
                     resortedBrain = []
                     for ID in IDs:
                         if ID is None:
@@ -331,7 +334,7 @@ def main():
                     brain = np.asarray(resortedBrain)
 
                 np.save(f"{subFolder}/{sub}/transform/{sub}_brain_run{runID}", brain)
-                np.save(f"{subFolder}/{sub}/transform/{sub}_behav_run{runID}", IDs)
+                np.save(f"{subFolder}/{sub}/transform/{sub}_behav_run{runID}", reSortedLabels)
 
     sort_align_behav_brain()
 
