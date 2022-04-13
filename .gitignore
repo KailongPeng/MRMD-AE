@@ -132,8 +132,8 @@ data/
 archive/
 *.nii
 *.nii.gz
-
-
+*.xml
+*.iml
 
 
 
