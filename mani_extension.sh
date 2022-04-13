@@ -33,5 +33,13 @@ for TRAINPCT in 50 30 10 70
 #    --lam=$LAM \ # 共享嵌入层的正则化
 #    --lam_mani=$LAMMANI \ # 流形正则化
 #    --consecutive_time # 只有当我们希望训练-测试时间是连续的时候。 only when we want the train-test time to be consecutive
+#    "--train_percent=50 \
+#        --ROI=early_visual \
+#        --hidden_dim=64 \
+#        --zdim=20 \
+#        --batch_size=64 \
+#        --lam=0 \
+#        --lam_mani=100 \
+#        --consecutive_time"
  done
 done
