@@ -1,3 +1,4 @@
+# coding=utf-8
 """
     子集时间点Subset timepoints，用于测试被试内的流形扩展
     在测试的数据片slice上插值interpolate流形嵌入manifold embedding
@@ -25,7 +26,9 @@ from lib.fMRI import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
 from lib.helper import extract_hidden_reps, get_models, checkexist
 from torch.utils.data import DataLoader
 from lib.utils import set_grad_req
+from glob import glob
 
+os.chdir("/Users/kailong/Desktop/MRMD-AE/MRMD-AE")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 parser = argparse.ArgumentParser()
@@ -45,6 +48,7 @@ parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--lam', type=float, default=0)
 parser.add_argument('--lam_mani', type=float, default=1)
 parser.add_argument('--n_epochs', type=int, default=4000)
+
 parser.add_argument('--shuffle_reg', action='store_true')
 parser.add_argument('--ind_mrAE', action='store_true',
                     help='set active to train independent MR-AE')  # 设置为激活，以训练独立的MR-AE
@@ -53,10 +57,93 @@ parser.add_argument('--consecutive_time', action='store_true',
 parser.add_argument('--oneAE', action='store_true', help='use a single autoencoder')  # 使用单一的自动编码器
 parser.add_argument('--reg_ref', action='store_true')
 
+import pickle5 as pickle
+
+
+def save_obj(obj, name):
+    with open(name + '.pkl', 'wb') as f:
+        # pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+        pickle.dump(obj, f)
+
+
+def load_obj(name):
+    with open(name + '.pkl', 'rb') as f:
+        return pickle.load(f)
+
+
+def normalize(X):
+    from scipy.stats import zscore
+    _X = X.copy()
+    _X = zscore(_X, axis=0)
+    # _X[np.isnan(_X)] = 0
+    return _X
+
+
+subs = []
+for ii in range(1, 34):
+    subs.append("sub" + f"{ii}".zfill(3))
+runDict = {}
+for sub in subs:
+    runDict[sub] = list(np.arange(1, 1 + len(glob(f"./data/localize/brain/{sub}_brain_run?.npy"))))
+# runDict = {'sub001': [1, 2, 3, 4, 5, 6, 7, 8], 'sub002': [1, 2, 3, 4, 5, 6, 7], 'sub003': [1, 2, 3, 4, 5, 6, 7],
+#          'sub004': [1, 2, 3, 4, 5, 6, 7, 8], 'sub005': [1, 2, 3, 4, 5, 6, 7, 8], 'sub006': [1, 2, 3, 4, 5],
+#          'sub007': [1, 2, 3, 4, 5, 6, 7, 8], 'sub008': [1, 2, 3, 4, 5, 6, 7, 8], 'sub009': [1, 2, 3, 4, 5, 6, 7, 8],
+#          'sub010': [1, 2, 3, 4, 5, 6, 7, 8], 'sub011': [1, 2, 3, 4, 5, 6], 'sub012': [1, 2, 3, 4, 5, 6, 7, 8],
+#          'sub013': [1, 2, 3, 4, 5, 6, 7, 8], 'sub014': [1, 2, 3, 4, 5, 6, 7, 8], 'sub015': [1, 2, 3, 4, 5, 6],
+#          'sub016': [1, 2, 3, 4, 5, 6, 7, 8], 'sub017': [1, 2, 3, 4, 5, 6, 7, 8], 'sub018': [1, 2, 3, 4, 5, 6, 7, 8],
+#          'sub019': [1, 2, 3, 4, 5, 6, 7, 8], 'sub020': [1, 2, 3, 4, 5, 6, 7], 'sub021': [1, 2, 3, 4, 5, 6, 7, 8],
+#          'sub022': [1, 2, 3, 4, 5, 6, 7, 8], 'sub023': [1, 2, 3, 4, 5, 6, 7, 8], 'sub024': [1, 2, 3, 4, 5, 6, 7, 8],
+#          'sub025': [1, 2, 3, 4, 5, 6], 'sub026': [1, 2, 3, 4, 5], 'sub027': [1, 2, 3, 4, 5, 6, 7, 8],
+#          'sub028': [1, 2, 3, 4, 5, 6, 7, 8], 'sub029': [1, 2, 3, 4, 5, 6, 7, 8], 'sub030': [1, 2, 3, 4, 5, 6, 7, 8],
+#          'sub031': [1, 2, 3, 4, 5, 6, 7, 8], 'sub032': [1, 2, 3, 4, 5, 6, 7, 8], 'sub033': [1, 2, 3, 4, 5, 6, 7]}
+
+
+def trainTestSplit(subList=None, TrainingSetRun=None, presentedOnly=True):
+    if TrainingSetRun is None:
+        TrainingSetRun = [1, 2, 3, 4]
+    if subList is None:
+        subList = ['sub001', 'sub002', 'sub003']
+    localizeData = './data/localize/'
+    for sub in subList:
+        TestingSetRun = list(set(runDict[sub]).difference(set(TrainingSetRun)))
+        TestingSetRun.sort()
+        print(f"{sub} TestingSetRun={TestingSetRun}")
+        TrainingSet_RunNumber = len(TrainingSetRun)
+        TestingSet_RunNumber = len(TestingSetRun)
+        assert np.mean(np.unique((runDict[sub])) == np.unique(TrainingSetRun + TestingSetRun)) == 1
+        brain = []
+        behav = []
+
+        for run in TrainingSetRun:
+            brain_t = np.load(f"{localizeData}/brain/{sub}_brain_run{run}.npy")
+            brain_t = normalize(brain_t)
+            behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
+            if presentedOnly:
+                presentedOnly_ID = behav_t != 0
+                brain_t = brain_t[presentedOnly_ID, :]
+                behav_t = behav_t[presentedOnly_ID]
+            brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
+            behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
+        save_obj([brain, behav], f"{localizeData}/trainTestData/{sub}_train_{TrainingSet_RunNumber}run")
+        for run in TestingSetRun:
+            brain_t = np.load(f"{localizeData}/brain/{sub}_brain_run{run}.npy")
+            brain_t = normalize(brain_t)
+            behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
+            if presentedOnly:
+                presentedOnly_ID = behav_t != 0
+                brain_t = brain_t[presentedOnly_ID, :]
+                behav_t = behav_t[presentedOnly_ID]
+            brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
+            behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
+        save_obj([brain, behav], f"{localizeData}/trainTestData/{sub}_test_{TestingSet_RunNumber}run")
+
+
+trainTestSplit(subList=subs, TrainingSetRun=[1, 2, 3, 4], presentedOnly=True)
+
 
 def main():
-    args = parser.parse_args()
-
+    # args = parser.parse_args("--train_percent=50     --ROI=early_visual     --hidden_dim=64     --zdim=20     --batch_size=64     --lam=0     --lam_mani=100     --consecutive_time")
+    args = parser.parse_args("")
     # 首先设置重复种子，确保可重复性
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -64,10 +151,10 @@ def main():
     random.seed(args.seed)
 
     # 结果应该保存在outfile
-    outfile = 'results/mrmdAE_insubject_mani_extension.csv'
+    outfile = 'kp_results/mrmdAE_insubject_mani_extension.csv'  # outfile = 'results/mrmdAE_insubject_mani_extension.csv'
 
     if args.ind_mrAE:  # 如果使用独立的mr-AE。 if independent mr-AE is used
-        outfile = 'results/ind_mrAE_insubject_mani_extension.csv'
+        outfile = 'kp_results/ind_mrAE_insubject_mani_extension.csv'
         if args.patient is None:
             print(
                 'ERROR: need to specify subject when indepent mrAE is trained, set --pt=?')  # 错误：当独立的mrAE被训练时需要指定被试，设置--pt=?
@@ -75,55 +162,7 @@ def main():
         args.n_subjects = 1
     if args.oneAE:  # 使用一个编码器一个解码器的设置
         print('using one encoder one decoder setup')
-        outfile = 'results/oneAE_insubject_mani_extension.csv'
-
-    # 训练的TR的位置
-    path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
-    if args.consecutive_time:  # 是否强调时间的连续性。如果不强调，那就是随机打乱TR
-        path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
-    if not os.path.exists(path_trainTRs):
-        if not args.consecutive_time:
-            trainTRs = np.random.choice(args.n_timerange, int(args.n_timerange * args.train_percent / 100),
-                                        replace=False)
-        else:
-            trainTRs = np.arange(int(args.n_timerange * args.train_percent / 100))
-        trainTRs.sort()
-        np.save(path_trainTRs, trainTRs)
-    else:
-        trainTRs = np.load(path_trainTRs)
-    testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)
-    testTRs.sort()
-
-    embedpath = "./data/mani_extension/data"
-    if not os.path.exists(embedpath):
-        os.makedirs(embedpath)
-
-    datapath = f"data/ROI_data/{args.ROI}/fMRI"
-    datanaming = f"{args.ROI}_sherlock_movie.npy"
-    embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_train_PHATE.npy"
-    if args.consecutive_time:
-        embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_consec_train_PHATE.npy"
-    args = parser.parse_args()
-
-    # 首先设置重复种子，确保可重复性
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    random.seed(args.seed)
-
-    # 结果应该保存在outfile
-    outfile = 'results/mrmdAE_insubject_mani_extension.csv'
-
-    if args.ind_mrAE:  # 如果使用独立的mr-AE。 if independent mr-AE is used
-        outfile = 'results/ind_mrAE_insubject_mani_extension.csv'
-        if args.patient is None:
-            print(
-                'ERROR: need to specify subject when indepent mrAE is trained, set --pt=?')  # 错误：当独立的mrAE被训练时需要指定被试，设置--pt=?
-            return
-        args.n_subjects = 1
-    if args.oneAE:  # 使用一个编码器一个解码器的设置
-        print('using one encoder one decoder setup')
-        outfile = 'results/oneAE_insubject_mani_extension.csv'
+        outfile = 'kp_results/oneAE_insubject_mani_extension.csv'
 
     # 训练的TR的位置
     path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
