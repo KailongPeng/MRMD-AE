@@ -34,10 +34,10 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--ROI', type=str, default='early_visual')
-parser.add_argument('--n_subjects', type=int, default=16)
+parser.add_argument('--n_subjects', type=int, default=33)
 parser.add_argument('--patient', type=int, default=None)
 parser.add_argument('--n_timerange', type=int, default=1976)
-parser.add_argument('--train_percent', type=int, default=90)
+parser.add_argument('--train_percent', type=str, default='4run')
 parser.add_argument('--hidden_dim', type=int, default=64)
 parser.add_argument('--zdim', type=int, default=20)
 parser.add_argument('--input_size', type=int, default=None)
@@ -67,8 +67,12 @@ def save_obj(obj, name):
 
 
 def load_obj(name):
-    with open(name + '.pkl', 'rb') as f:
-        return pickle.load(f)
+    if name[-3:]=='pkl':
+        with open(name, 'rb') as f:
+            return pickle.load(f)
+    else:
+        with open(name + '.pkl', 'rb') as f:
+            return pickle.load(f)
 
 
 def normalize(X):
@@ -79,12 +83,30 @@ def normalize(X):
     return _X
 
 
+def mkdir(folder):
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+
+def kp_run(cmd):
+    print(cmd)
+    sbatch_response = subprocess.getoutput(cmd)
+    check(sbatch_response)
+    return sbatch_response
+
+
+def check(sbatch_response):
+    print(sbatch_response)
+    if "Exception" in sbatch_response or "Error" in sbatch_response or "Failed" in sbatch_response or "not" in sbatch_response:
+        raise Exception(sbatch_response)
+
+args = parser.parse_args("")
 subs = []
 for ii in range(1, 34):
     subs.append("sub" + f"{ii}".zfill(3))
 runDict = {}
 for sub in subs:
-    runDict[sub] = list(np.arange(1, 1 + len(glob(f"./data/localize/brain/{sub}_brain_run?.npy"))))
+    runDict[sub] = list(np.arange(1, 1 + len(glob(f"./data/localize/brain/{args.ROI}/{sub}_brain_run?.npy"))))
 # runDict = {'sub001': [1, 2, 3, 4, 5, 6, 7, 8], 'sub002': [1, 2, 3, 4, 5, 6, 7], 'sub003': [1, 2, 3, 4, 5, 6, 7],
 #          'sub004': [1, 2, 3, 4, 5, 6, 7, 8], 'sub005': [1, 2, 3, 4, 5, 6, 7, 8], 'sub006': [1, 2, 3, 4, 5],
 #          'sub007': [1, 2, 3, 4, 5, 6, 7, 8], 'sub008': [1, 2, 3, 4, 5, 6, 7, 8], 'sub009': [1, 2, 3, 4, 5, 6, 7, 8],
@@ -97,7 +119,14 @@ for sub in subs:
 #          'sub028': [1, 2, 3, 4, 5, 6, 7, 8], 'sub029': [1, 2, 3, 4, 5, 6, 7, 8], 'sub030': [1, 2, 3, 4, 5, 6, 7, 8],
 #          'sub031': [1, 2, 3, 4, 5, 6, 7, 8], 'sub032': [1, 2, 3, 4, 5, 6, 7, 8], 'sub033': [1, 2, 3, 4, 5, 6, 7]}
 
-
+def removeNanTR(brain_t,behav_t):
+    # 因为在数据处理的时候为了保持每一个图片都被展示5次，因此在不足5次的时候采用了Nan的补足的方法，这最初是为了方便后面的被试之间的对齐损失的设计。
+    # 但是现在不想考虑那么多，就直接使用本函数去掉开头是Nan的TR
+    TRhead = brain_t[:,0]
+    NanID = np.isnan(TRhead)
+    brain_t = brain_t[~NanID,:]
+    behav_t = behav_t[~NanID]
+    return brain_t,behav_t
 def trainTestSplit(subList=None, TrainingSetRun=None, presentedOnly=True):
     if TrainingSetRun is None:
         TrainingSetRun = [1, 2, 3, 4]
@@ -113,37 +142,40 @@ def trainTestSplit(subList=None, TrainingSetRun=None, presentedOnly=True):
         assert np.mean(np.unique((runDict[sub])) == np.unique(TrainingSetRun + TestingSetRun)) == 1
         brain = []
         behav = []
-
+        # if not os.path.exists(f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run.pkl"):
         for run in TrainingSetRun:
-            brain_t = np.load(f"{localizeData}/brain/{sub}_brain_run{run}.npy")
-            brain_t = normalize(brain_t)
+            brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
             behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
+            brain_t, behav_t = removeNanTR(brain_t, behav_t)
+            brain_t = normalize(brain_t)
             if presentedOnly:
                 presentedOnly_ID = behav_t != 0
                 brain_t = brain_t[presentedOnly_ID, :]
                 behav_t = behav_t[presentedOnly_ID]
             brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
             behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
-        save_obj([brain, behav], f"{localizeData}/trainTestData/{sub}_train_{TrainingSet_RunNumber}run")
+        save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run")
+
+        brain = []
+        behav = []
         for run in TestingSetRun:
-            brain_t = np.load(f"{localizeData}/brain/{sub}_brain_run{run}.npy")
-            brain_t = normalize(brain_t)
+            brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
             behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
+            brain_t, behav_t = removeNanTR(brain_t, behav_t)
+            brain_t = normalize(brain_t)
             if presentedOnly:
                 presentedOnly_ID = behav_t != 0
                 brain_t = brain_t[presentedOnly_ID, :]
                 behav_t = behav_t[presentedOnly_ID]
             brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
             behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
-        save_obj([brain, behav], f"{localizeData}/trainTestData/{sub}_test_{TestingSet_RunNumber}run")
+        save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_test_{TestingSet_RunNumber}run")
 
 
 trainTestSplit(subList=subs, TrainingSetRun=[1, 2, 3, 4], presentedOnly=True)
 
 
 def main():
-    # args = parser.parse_args("--train_percent=50     --ROI=early_visual     --hidden_dim=64     --zdim=20     --batch_size=64     --lam=0     --lam_mani=100     --consecutive_time")
-    args = parser.parse_args("")
     # 首先设置重复种子，确保可重复性
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -151,10 +183,10 @@ def main():
     random.seed(args.seed)
 
     # 结果应该保存在outfile
-    outfile = 'kp_results/mrmdAE_insubject_mani_extension.csv'  # outfile = 'results/mrmdAE_insubject_mani_extension.csv'
+    outfile = 'results/localize/mrmdAE_insubject_mani_extension.csv'  # outfile = 'results/mrmdAE_insubject_mani_extension.csv'
 
     if args.ind_mrAE:  # 如果使用独立的mr-AE。 if independent mr-AE is used
-        outfile = 'kp_results/ind_mrAE_insubject_mani_extension.csv'
+        outfile = 'results/localize/ind_mrAE_insubject_mani_extension.csv'
         if args.patient is None:
             print(
                 'ERROR: need to specify subject when indepent mrAE is trained, set --pt=?')  # 错误：当独立的mrAE被训练时需要指定被试，设置--pt=?
@@ -162,63 +194,70 @@ def main():
         args.n_subjects = 1
     if args.oneAE:  # 使用一个编码器一个解码器的设置
         print('using one encoder one decoder setup')
-        outfile = 'kp_results/oneAE_insubject_mani_extension.csv'
+        outfile = 'results/localize/oneAE_insubject_mani_extension.csv'
 
-    # 训练的TR的位置
-    path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
-    if args.consecutive_time:  # 是否强调时间的连续性。如果不强调，那就是随机打乱TR
-        path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
-    if not os.path.exists(path_trainTRs):
-        if not args.consecutive_time:
-            trainTRs = np.random.choice(args.n_timerange, int(args.n_timerange * args.train_percent / 100),
-                                        replace=False)
-        else:
-            trainTRs = np.arange(int(args.n_timerange * args.train_percent / 100))
-        trainTRs.sort()
-        np.save(path_trainTRs, trainTRs)
-    else:
-        trainTRs = np.load(path_trainTRs)
-    testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)
-    testTRs.sort()
+    # 训练的TR的位置，也就是TR的ID ， 加载为 trainTRs
+    # path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"  # path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
+    # if args.consecutive_time:  # 是否强调时间的连续性。如果不强调，那就是随机打乱TR
+    #     path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
+    # if not os.path.exists(path_trainTRs):
+    #     if not args.consecutive_time:
+    #         trainTRs = np.random.choice(args.n_timerange, int(args.n_timerange * args.train_percent / 100),
+    #                                     replace=False)
+    #     else:
+    #         trainTRs = np.arange(int(args.n_timerange * args.train_percent / 100))
+    #     trainTRs.sort()
+    #     np.save(path_trainTRs, trainTRs)
+    # else:
+    #     trainTRs = np.load(path_trainTRs)
+    # # 把除了训练用的TR之外的所有TR都用作测试
+    # testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)  # numpy.setxor1d()函数查找两个数组的集合排他性，并返回输入数组中只有一个（不是两个）的排序的唯一值。
+    # testTRs.sort()
 
-    embedpath = "./data/mani_extension/data"
+    embedpath = "./data/localize/mani_extension/data/"
     if not os.path.exists(embedpath):
         os.makedirs(embedpath)
 
-    datapath = f"data/ROI_data/{args.ROI}/fMRI"
-    datanaming = f"{args.ROI}_sherlock_movie.npy"
-    embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_train_PHATE.npy"
-    if args.consecutive_time:
-        embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_consec_train_PHATE.npy"
+    trainTestDataPath = "/Users/kailong/Desktop/MRMD-AE/MRMD-AE/data/localize/trainTestData/"
+    # datapath = "/Users/kailong/Desktop/MRMD-AE/MRMD-AE/data/localize/brain/early_visual/"  # datapath = f"data/ROI_data/{args.ROI}/fMRI"
+    # datanaming = f"{args.ROI}_sherlock_movie.npy"
+    embednaming = f"{args.ROI}_{args.zdim}dimension_train_{args.train_percent}_PHATE"
 
-    if not os.path.exists(os.path.join(embedpath, f"sub-01_{embednaming}")):
+    # if args.consecutive_time:
+    #     embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_consec_train_PHATE.npy"
+
+    if not os.path.exists(os.path.join(embedpath, f"sub001_{embednaming}.pkl")):
         print('prepare train embed data')  # 使用 phate 准备训练嵌入数据
-        for pt in range(1, args.n_subjects + 1):
+        for sub in subs:  # for pt in range(1, args.n_subjects + 1):
+            print(sub)
             # 加载训练数据dataloader
-            X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
+
+            [X, label] = load_obj(f"{trainTestDataPath}/{args.ROI}/{sub}_train_{args.train_percent}")
+            # X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
 
             # 在训练数据上面训练phate模型为pop，获得训练数据X的特征值X_p
             pop = phate.PHATE(n_components=args.zdim)
             X_p = pop.fit_transform(X)
 
             # 加载测试数据
-            Xtest = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[testTRs]
+            testpkl = glob(f"{trainTestDataPath}/{args.ROI}/{sub}_test_?run.pkl") ; assert len(testpkl)==1 ; testpkl=testpkl[0]
+            testRunNumber = int(testpkl.split('test_')[-1].split('run.pkl')[0])
+            embednaming_test = f"{args.ROI}_{args.zdim}dimension_test_{testRunNumber}run_PHATE"
+            [Xtest, label_test] = load_obj(testpkl)
 
             # 使用已经训练好的phate模型pop来将测试数据转化到表征空间中
             Xtest_p = pop.transform(Xtest)
 
             # 保存训练数据的表征
-            np.save(os.path.join(embedpath, f"sub-{pt:02}_{embednaming}"), X_p)
+            save_obj(X_p, os.path.join(embedpath, f"{sub}_{embednaming}"))
 
             # 保存测试数据的表征
-            testphate_file = f"sub-{pt:02}_{embednaming}"
-            testphate_file = testphate_file.replace('_train_', '_test_')
-            np.save(os.path.join(embedpath, testphate_file),
-                    Xtest_p)  # 测试是phate 地标插值 Xtest_p 。 The test is phate landmark interpolation Xtest_p
+            save_obj(Xtest_p,
+                     os.path.join(embedpath, f"{sub}_{embednaming_test}"))  # 测试是phate 地标插值 Xtest_p 。 The test is phate landmark interpolation Xtest_p
 
-    savepath = f"./data/mani_extension/models/sherlock_MNI152_3mm_data_{args.ROI}_mani_extend_{args.train_percent}"
-    if args.consecutive_time:
-        savepath = savepath + '_consec'
+    savepath = f"./data/localize/mani_extension/models/MNI152_2mm_data_{args.ROI}_mani_extend_{args.train_percent}"  # MNI152_T1_2mm_brain
+    # if args.consecutive_time:
+    #     savepath = savepath + '_consec'
     if args.oneAE:
         savepath = savepath + '_oneAE'
 
@@ -250,7 +289,7 @@ def main():
     patient_ids = np.arange(1, args.n_subjects + 1)
     if args.ind_mrAE:
         patient_ids = [args.patient]
-
+    datapath = './data/localize/trainTestData/early_visual/' ; trainTRs = args.train_percent ; datanaming = f"{args.ROI}_localize.npy"
     # 加载训练时间点并训练 自动编码器 load training timepoints and train autoencoder
     dataset = fMRI_Time_Subjs_Embed_Dataset(patient_ids,
                                             datapath,
