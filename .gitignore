@@ -132,7 +132,7 @@ data/
 archive/
 *.nii
 *.nii.gz
-
+*.pkl
 PHATE
 logs
 
