@@ -22,7 +22,7 @@ import argparse
 import torch
 import random
 import phate
-from lib.fMRI import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
+from lib.fMRI_kp import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
 from lib.helper import extract_hidden_reps, get_models, checkexist
 from torch.utils.data import DataLoader
 from lib.utils import set_grad_req
@@ -142,34 +142,34 @@ def trainTestSplit(subList=None, TrainingSetRun=None, presentedOnly=True):
         assert np.mean(np.unique((runDict[sub])) == np.unique(TrainingSetRun + TestingSetRun)) == 1
         brain = []
         behav = []
-        # if not os.path.exists(f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run.pkl"):
-        for run in TrainingSetRun:
-            brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
-            behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
-            brain_t, behav_t = removeNanTR(brain_t, behav_t)
-            brain_t = normalize(brain_t)
-            if presentedOnly:
-                presentedOnly_ID = behav_t != 0
-                brain_t = brain_t[presentedOnly_ID, :]
-                behav_t = behav_t[presentedOnly_ID]
-            brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
-            behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
-        save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run")
+        if not os.path.exists(f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run.pkl"):
+            for run in TrainingSetRun:
+                brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
+                behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
+                brain_t, behav_t = removeNanTR(brain_t, behav_t)
+                brain_t = normalize(brain_t)
+                if presentedOnly:
+                    presentedOnly_ID = behav_t != 0
+                    brain_t = brain_t[presentedOnly_ID, :]
+                    behav_t = behav_t[presentedOnly_ID]
+                brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
+                behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
+            save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run")
 
-        brain = []
-        behav = []
-        for run in TestingSetRun:
-            brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
-            behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
-            brain_t, behav_t = removeNanTR(brain_t, behav_t)
-            brain_t = normalize(brain_t)
-            if presentedOnly:
-                presentedOnly_ID = behav_t != 0
-                brain_t = brain_t[presentedOnly_ID, :]
-                behav_t = behav_t[presentedOnly_ID]
-            brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
-            behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
-        save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_test_{TestingSet_RunNumber}run")
+            brain = []
+            behav = []
+            for run in TestingSetRun:
+                brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
+                behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
+                brain_t, behav_t = removeNanTR(brain_t, behav_t)
+                brain_t = normalize(brain_t)
+                if presentedOnly:
+                    presentedOnly_ID = behav_t != 0
+                    brain_t = brain_t[presentedOnly_ID, :]
+                    behav_t = behav_t[presentedOnly_ID]
+                brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
+                behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
+            save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_test_{TestingSet_RunNumber}run")
 
 
 trainTestSplit(subList=subs, TrainingSetRun=[1, 2, 3, 4], presentedOnly=True)
@@ -289,7 +289,7 @@ def main():
     patient_ids = np.arange(1, args.n_subjects + 1)
     if args.ind_mrAE:
         patient_ids = [args.patient]
-    datapath = './data/localize/trainTestData/early_visual/' ; trainTRs = args.train_percent ; datanaming = f"{args.ROI}_localize.npy"
+    datapath = './data/localize/trainTestData/early_visual/' ; trainTRs = args.train_percent ; datanaming = f"{args.ROI}_localize"
     # 加载训练时间点并训练 自动编码器 load training timepoints and train autoencoder
     dataset = fMRI_Time_Subjs_Embed_Dataset(patient_ids,
                                             datapath,
@@ -299,7 +299,7 @@ def main():
                                             data_3d=False,
                                             data_name_suffix=datanaming)
     if args.input_size is None:
-        args.input_size = dataset.get_TR_dims()[0]
+        args.input_size = dataset.get_TR_dims()[0]  # dataset.timeseries.shape = (320, 33, 3215)
     if args.input_size != dataset.get_TR_dims()[0]:
         print('ERROR: input dim and args.input_size not match')  # 错误：输入dim和args.input_size不匹配
         return
