@@ -47,7 +47,7 @@ parser.add_argument('--symm',
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--lam', type=float, default=0.01)
 parser.add_argument('--lam_mani', type=float, default=1)
-parser.add_argument('--n_epochs', type=int, default=1)  #4000
+parser.add_argument('--n_epochs', type=int, default=1)  # 4000
 
 parser.add_argument('--shuffle_reg', action='store_true')
 parser.add_argument('--ind_mrAE', action='store_true',
@@ -67,7 +67,7 @@ def save_obj(obj, name):
 
 
 def load_obj(name):
-    if name[-3:]=='pkl':
+    if name[-3:] == 'pkl':
         with open(name, 'rb') as f:
             return pickle.load(f)
     else:
@@ -101,6 +101,7 @@ def check(sbatch_response):
     if "Exception" in sbatch_response or "Error" in sbatch_response or "Failed" in sbatch_response or "not" in sbatch_response:
         raise Exception(sbatch_response)
 
+
 args = parser.parse_args("")
 subs = []
 for ii in range(1, 34):
@@ -108,6 +109,8 @@ for ii in range(1, 34):
 runDict = {}
 for sub in subs:
     runDict[sub] = list(np.arange(1, 1 + len(glob(f"./data/localize/brain/{args.ROI}/{sub}_brain_run?.npy"))))
+
+
 # runDict = {'sub001': [1, 2, 3, 4, 5, 6, 7, 8], 'sub002': [1, 2, 3, 4, 5, 6, 7], 'sub003': [1, 2, 3, 4, 5, 6, 7],
 #          'sub004': [1, 2, 3, 4, 5, 6, 7, 8], 'sub005': [1, 2, 3, 4, 5, 6, 7, 8], 'sub006': [1, 2, 3, 4, 5],
 #          'sub007': [1, 2, 3, 4, 5, 6, 7, 8], 'sub008': [1, 2, 3, 4, 5, 6, 7, 8], 'sub009': [1, 2, 3, 4, 5, 6, 7, 8],
@@ -120,14 +123,16 @@ for sub in subs:
 #          'sub028': [1, 2, 3, 4, 5, 6, 7, 8], 'sub029': [1, 2, 3, 4, 5, 6, 7, 8], 'sub030': [1, 2, 3, 4, 5, 6, 7, 8],
 #          'sub031': [1, 2, 3, 4, 5, 6, 7, 8], 'sub032': [1, 2, 3, 4, 5, 6, 7, 8], 'sub033': [1, 2, 3, 4, 5, 6, 7]}
 
-def removeNanTR(brain_t,behav_t):
+def removeNanTR(brain_t, behav_t):
     # 因为在数据处理的时候为了保持每一个图片都被展示5次，因此在不足5次的时候采用了Nan的补足的方法，这最初是为了方便后面的被试之间的对齐损失的设计。
     # 但是现在不想考虑那么多，就直接使用本函数去掉开头是Nan的TR
-    TRhead = brain_t[:,0]
+    TRhead = brain_t[:, 0]
     NanID = np.isnan(TRhead)
-    brain_t = brain_t[~NanID,:]
+    brain_t = brain_t[~NanID, :]
     behav_t = behav_t[~NanID]
-    return brain_t,behav_t
+    return brain_t, behav_t
+
+
 def trainTestSplit(subList=None, TrainingSetRun=None, presentedOnly=True):
     if TrainingSetRun is None:
         TrainingSetRun = [1, 2, 3, 4]
@@ -241,7 +246,9 @@ def main():
             X_p = pop.fit_transform(X)
 
             # 加载测试数据
-            testpkl = glob(f"{trainTestDataPath}/{args.ROI}/{sub}_test_?run.pkl") ; assert len(testpkl)==1 ; testpkl=testpkl[0]
+            testpkl = glob(f"{trainTestDataPath}/{args.ROI}/{sub}_test_?run.pkl");
+            assert len(testpkl) == 1;
+            testpkl = testpkl[0]
             testRunNumber = int(testpkl.split('test_')[-1].split('run.pkl')[0])
             embednaming_test = f"{args.ROI}_{args.zdim}dimension_test_{testRunNumber}run_PHATE"
             [Xtest, label_test] = load_obj(testpkl)
@@ -254,7 +261,8 @@ def main():
 
             # 保存测试数据的表征
             save_obj(Xtest_p,
-                     os.path.join(embedpath, f"{sub}_{embednaming_test}"))  # 测试是phate 地标插值 Xtest_p 。 The test is phate landmark interpolation Xtest_p
+                     os.path.join(embedpath,
+                                  f"{sub}_{embednaming_test}"))  # 测试是phate 地标插值 Xtest_p 。 The test is phate landmark interpolation Xtest_p
 
     savepath = f"./data/localize/mani_extension/models/MNI152_2mm_data_{args.ROI}_mani_extend_{args.train_percent}"  # MNI152_T1_2mm_brain
     # if args.consecutive_time:
@@ -290,7 +298,9 @@ def main():
     patient_ids = np.arange(1, args.n_subjects + 1)
     if args.ind_mrAE:
         patient_ids = [args.patient]
-    datapath = './data/localize/trainTestData/early_visual/' ; trainTRs = args.train_percent ; datanaming = f"{args.ROI}_localize"
+    datapath = './data/localize/trainTestData/early_visual/';
+    trainTRs = args.train_percent;
+    datanaming = f"{args.ROI}_localize"
     # 加载训练时间点并训练 自动编码器 load training timepoints and train autoencoder
     dataset = fMRI_Time_Subjs_Embed_Dataset(patient_ids,
                                             datapath,
@@ -371,11 +381,12 @@ def main():
             if args.lam > 0:  # 惩罚不同被试的潜伏空间的错位。也就是不同被试之间的批量效应。增大lambda可以对齐不同被试之间的流形。
 
                 # 确保当前的batch的数据的所有的TR分别对应的图片都是一致的。
-                def sameTRlabel(t1,t2):
-                    t1=np.asarray(t1)
+                def sameTRlabel(t1, t2):
+                    t1 = np.asarray(t1)
                     t2 = np.asarray(t2)
-                    assert np.mean(t1==t2)==1
-                sameTRlabel(behav_batch[:,pt_list[0]], behav_batch[:,pt_list[1]])  # behav_batch: TR_subset x sub
+                    assert np.mean(t1 == t2) == 1
+
+                sameTRlabel(behav_batch[:, pt_list[0]], behav_batch[:, pt_list[1]])  # behav_batch: TR_subset x sub
 
                 loss_reg = reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[1]])
                 if args.reg_ref:
@@ -453,7 +464,7 @@ def main():
         hiddenfile = f"ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden"
     else:
         hiddenfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden"
-    save_obj([hidden, behav_test],os.path.join(savepath, hiddenfile))
+    save_obj([hidden, behav_test], os.path.join(savepath, hiddenfile))
     # np.save(os.path.join(savepath, hiddenfile), hidden)
 
     cols.append('hiddenfile')
@@ -467,6 +478,7 @@ def main():
         outdf_old = pd.read_csv(outfile)
         outdf = pd.concat([outdf_old, outdf])
     outdf.to_csv(outfile, index=False)
+
 
 if __name__ == '__main__':
     main()

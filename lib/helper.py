@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import logging
 import os
 
+
 def balance_train_data(X_train, Y_train, minimize=True):
     # assuming binary labels here
     (unique, counts) = np.unique(Y_train, return_counts=True)
@@ -46,30 +47,30 @@ def decode_timeseries(PARAMETERS):
     subject_id: 1--n_pt
     n_folds: kfold 
     """
-    kf = KFold(n_splits = n_folds, shuffle=True)
+    kf = KFold(n_splits=n_folds, shuffle=True)
     results = pd.DataFrame(columns=['subject_ID', 'fold', 'accuracy'])
     for split, (train, test) in enumerate(kf.split(np.arange(data.shape[0]))):
         model = SVC(kernel='rbf', C=10)
-        X_train=data[train,:]
+        X_train = data[train, :]
         y_train = labels[train]
         if balance_min is not None:
             X_train, y_train = balance_train_data(X_train, y_train, minimize=balance_min)
         model.fit(X_train, y_train)
-        score = model.score(data[test,:], labels[test])
-        results.loc[len(results)] = {'subject_ID':subject_id, 'fold':split, 'accuracy':score}
+        score = model.score(data[test, :], labels[test])
+        results.loc[len(results)] = {'subject_ID': subject_id, 'fold': split, 'accuracy': score}
 
     return results
 
 
-def drive_decoding(data_allpt, labels, kfold=5, balance_min = None, datasource='Sherlock', ROI='early_vis' ):
-    t0=time.time()
-    iterable_data = [(data_allpt[i], labels, balance_min, i+1, kfold) for i in range(len(data_allpt))]
+def drive_decoding(data_allpt, labels, kfold=5, balance_min=None, datasource='Sherlock', ROI='early_vis'):
+    t0 = time.time()
+    iterable_data = [(data_allpt[i], labels, balance_min, i + 1, kfold) for i in range(len(data_allpt))]
     pool = mp.Pool(len(data_allpt))
     results = pool.map(decode_timeseries, iterable_data)
     results = pd.concat(results)
     # print('time consumption= ', time.time()-t0)
     return results
-    
+
 
 def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
     # idx is pt-1 to index the mlp
@@ -83,7 +84,7 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
     hidden_reps = []
     aligned_hidden_reps = []
     behavs = []
-    for i in range(len(dataset)): # 每一个被试执行一次循环
+    for i in range(len(dataset)):  # 每一个被试执行一次循环
         input_TR, behav_t = dataset[i]
         input_TR = torch.from_numpy(input_TR)
         input_TR = input_TR.unsqueeze(0).unsqueeze(0)
@@ -97,25 +98,25 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
             aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
             behavs.append(behav_t)
         else:
-            pt = i//args.n_timerange
+            pt = i // args.n_timerange
             decoders[pt].eval()
-            hidden, _=decoders[pt](common_hidden)
+            hidden, _ = decoders[pt](common_hidden)
             aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
             behavs.append(behav_t)
 
         if amlps is not None:
-            idx = i//args.n_timerange
+            idx = i // args.n_timerange
             aligned_hidden = amlps[idx](hidden)
             aligned_hidden = aligned_hidden.detach().cpu().numpy().flatten()
             aligned_hidden_reps.append(aligned_hidden)
 
-
-        hidden = hidden.detach().cpu().numpy()[0,0,:]  # hidden = hidden.detach().cpu().numpy().flatten()
+        hidden = hidden.detach().cpu().numpy()[0, 0, :]  # hidden = hidden.detach().cpu().numpy().flatten()
         hidden_reps.append(hidden)
     # hidden_reps = np.vstack(hidden_reps)
-    
+
     # aligned_hidden_reps = np.vstack(aligned_hidden_reps)
     return hidden_reps, aligned_hidden_reps, behavs
+
 
 def get_models(args):
     # 设置编码器的维度参数
@@ -124,14 +125,14 @@ def get_models(args):
     # 对于每一个被试，分别设置一次解码器的维度参数。这里放硬了MRMD-AE中的多个解码器的概念。
     decoders = []
     for i in range(args.n_subjects):
-        decoder = Decoder_Manifold(args.zdim, args.hidden_dim, args.hidden_dim * 2, args.hidden_dim * 4, args.input_size)
+        decoder = Decoder_Manifold(args.zdim, args.hidden_dim, args.hidden_dim * 2, args.hidden_dim * 4,
+                                   args.input_size)
         decoders.append(decoder)
 
     return encoder, decoders
 
 
 def plot_losses(args, all_losses, len_dataloader, n_timepoints, savepath):
-
     fig, ax = plt.subplots()
     for j, l in enumerate(['total loss', 'reconstruction loss', 'manifold_reg_loss', 'regularization loss']):
         ax.scatter(range(args.load_epoch, args.n_epochs),
@@ -146,11 +147,12 @@ def plot_losses(args, all_losses, len_dataloader, n_timepoints, savepath):
     plt.savefig(os.path.join(savepath, 'all_losses'))
     logging.info(f'Finished AE training {args.n_epochs} epochs')
 
-def checkexist(targetdf, additional ):
-    if len(targetdf)<1:
+
+def checkexist(targetdf, additional):
+    if len(targetdf) < 1:
         return False
     for key in additional.keys():
         targetdf = targetdf.loc[targetdf[key] == additional[key]]
-        if targetdf.shape[0]<1:
+        if targetdf.shape[0] < 1:
             return False
     return True
