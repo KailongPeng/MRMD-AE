@@ -82,8 +82,9 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
 
     hidden_reps = []
     aligned_hidden_reps = []
-    for i in range(len(dataset)):
-        input_TR = dataset[i]
+    behavs = []
+    for i in range(len(dataset)): # 每一个被试执行一次循环
+        input_TR, behav_t = dataset[i]
         input_TR = torch.from_numpy(input_TR)
         input_TR = input_TR.unsqueeze(0).unsqueeze(0)
         input_TR = input_TR.float().to(device)
@@ -94,11 +95,13 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
             decoder.eval()
             hidden, _ = decoder(common_hidden)
             aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
+            behavs.append(behav_t)
         else:
             pt = i//args.n_timerange
             decoders[pt].eval()
             hidden, _=decoders[pt](common_hidden)
             aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
+            behavs.append(behav_t)
 
         if amlps is not None:
             idx = i//args.n_timerange
@@ -107,12 +110,12 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
             aligned_hidden_reps.append(aligned_hidden)
 
 
-        hidden = hidden.detach().cpu().numpy().flatten()
+        hidden = hidden.detach().cpu().numpy()[0,0,:]  # hidden = hidden.detach().cpu().numpy().flatten()
         hidden_reps.append(hidden)
-    hidden_reps = np.vstack(hidden_reps)
+    # hidden_reps = np.vstack(hidden_reps)
     
-    aligned_hidden_reps = np.vstack(aligned_hidden_reps)
-    return hidden_reps, aligned_hidden_reps
+    # aligned_hidden_reps = np.vstack(aligned_hidden_reps)
+    return hidden_reps, aligned_hidden_reps, behavs
 
 def get_models(args):
     # 设置编码器的维度参数
