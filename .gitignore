@@ -133,7 +133,8 @@ archive/
 *.nii
 *.nii.gz
 
-
+PHATE
+logs
 
 
 
