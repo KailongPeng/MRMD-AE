@@ -1,3 +1,4 @@
+# coding=utf-8
 """
     子集时间点Subset timepoints，用于测试被试内的流形扩展
     在测试的数据片slice上插值interpolate流形嵌入manifold embedding

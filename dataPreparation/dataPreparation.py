@@ -1,4 +1,5 @@
 testMode = True
+# http://localhost:8970/notebooks/users/kp578/localize/MRMD-AE/archive/dataPreparation.ipynb
 import os
 import warnings  # Ignore sklearn future warning
 import numpy as np
@@ -289,10 +290,11 @@ def main():
             for image in range(1, 17):
                 ID = np.where(ShownImages == image)[0]
                 ID = complete5ID(ID)
-                reSortedLabels = reSortedLabels + 5*[image]
                 IDs = ID if image == 1 else np.concatenate([IDs, ID], axis=0)
+                reSortedLabels = reSortedLabels + 5 * [image]
             ID = np.where(ShownImages == 0)[0]
             IDs = np.concatenate([IDs, ID], axis=0)
+            reSortedLabels = reSortedLabels + len(ID) * [0]
             return IDs, reSortedLabels
 
         subFolder = "/gpfs/milgram/project/turk-browne/projects/localize/analysis/subjects/"

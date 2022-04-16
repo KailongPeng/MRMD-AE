@@ -133,9 +133,11 @@ archive/
 *.nii
 *.nii.gz
 *.pkl
-PHATE
 logs
 
+*.xml
+*.iml
+PHATE/
 
 
 
