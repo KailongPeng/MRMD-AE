@@ -15,6 +15,7 @@
 # interpolate manifold embedding on test slices of data
 # MRMD-AE
 import os
+print(f"conda env={os.environ['CONDA_DEFAULT_ENV']}")
 import warnings  # Ignore sklearn future warning
 import numpy as np
 import pandas as pd
