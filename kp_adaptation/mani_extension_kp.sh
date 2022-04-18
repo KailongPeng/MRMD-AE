@@ -53,7 +53,6 @@ python3 -u ./kp_adaptation/mani_extension_kp.py \
 #        --lam=0 \
 #        --lam_mani=100 \
 #        --consecutive_time"
- done
-done
-
+# done
+# done
 echo done
