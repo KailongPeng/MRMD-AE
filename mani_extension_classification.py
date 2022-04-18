@@ -18,11 +18,11 @@ parser.add_argument('--ROI', type = str, default = 'early_visual')
 parser.add_argument('--hidden_dim', type = int, default=64)
 parser.add_argument('--zdim', type = int, default=20)
 parser.add_argument('--n_pt', type = int, default=16)
-parser.add_argument('--symm', action ='store_true') # use the symmetric config for encoder as decoder, so the latent encoder dim is the same as manifold dim
+parser.add_argument('--symm', action ='store_true') # 编码器和解码器使用对称配置，因此，潜伏的编码器尺寸与流形尺寸相同。 use the symmetric config for encoder as decoder, so the latent encoder dim is the same as manifold dim
 parser.add_argument('--lam', type = float, default=0)
 parser.add_argument('--lam_mani', type = float, default=1)
-parser.add_argument('--consecutive_time', action ='store_true', help='set active to make consecutive times e.g. 50% train will be first half of time series')
-parser.add_argument('--oneAE', action = 'store_true', help='one encoder one decoder set up (vanilla AE or mr-AE)')
+parser.add_argument('--consecutive_time', action ='store_true', help='set active to make consecutive times e.g. 50% train will be first half of time series')  #设置活动，使连续的时间，例如，50%的火车将是时间序列的前半部分。
+parser.add_argument('--oneAE', action = 'store_true', help='one encoder one decoder set up (vanilla AE or mr-AE)')  # 一个编码器一个解码器的设置（vanilla AE或mr-AE）。
 
 
 def get_decoding(embedpath, embednaming, labeldf, testTRs, args, embeds = None):
@@ -66,7 +66,7 @@ def main():
     testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)
     testTRs.sort()
 
-    #landmark results:
+    # 地标结果 landmark results:
     tr_pct = f"{args.train_percent}"
     print(f"---- Train TR Percentage {tr_pct}% ----")
     
@@ -76,12 +76,12 @@ def main():
     entry = [tr_pct, args.ROI, 'PHATE_landmark']
 
     if not checkexist(outdf, dict(zip(cols[:3], entry))):
-        print("get PHATE landmark decodings ...")
+        print("get PHATE landmark decodings ...")  # 获得PHATE地标解码
         entry_add = get_decoding(embedpath, embednaming, labeldf, testTRs, args)
         entry.extend(entry_add)
         outdf.loc[len(outdf)]=entry
 
-    # mrmdAE extension
+    # mrmdAE扩展  mrmdAE extension
     if args.consecutive_time:
         savepath =savepath+'_consec'
     if args.oneAE:
@@ -99,7 +99,7 @@ def main():
         entry = [tr_pct, args.ROI, method]
 
         if not checkexist(outdf, dict(zip(cols[:3], entry))):
-            print("get MR-AE decodings ...")
+            print("get MR-AE decodings ...")  # 获得MR-AE解码
             entry_add = get_decoding(savepath, embednaming, labeldf, testTRs, args, embeds=mrmd_embeds)
             entry.extend(entry_add)
             outdf.loc[len(outdf)] = entry

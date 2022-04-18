@@ -62,11 +62,67 @@ def decode_timeseries(PARAMETERS):
     return results
 
 
+def decode_timeseries_kp(PARAMETERS):
+    data, labels, runID, balance_min, subject_id, n_folds = PARAMETERS
+    """
+    data: n_TR x hidden_dim
+    labels: n_TR
+    balance_min: None, True, False
+    subject_id: 1--n_pt
+    n_folds: kfold 
+    """
+    uniqueRuns = np.unique(runID)
+    results = pd.DataFrame(columns=['subject_ID', 'testRunID', 'accuracy'])
+    if len(uniqueRuns) > 1:
+        for testRunID in uniqueRuns:
+            TrainID = runID != testRunID
+            X_train = data[TrainID]
+            y_train = labels[TrainID]
+            TestID = runID == testRunID
+            X_test = data[TestID]
+            y_test = labels[TestID]
+            model = SVC(kernel='rbf', C=10)
+            model.fit(X_train, y_train)
+            score = model.score(X_test, y_test)
+            results.loc[len(results)] = {'subject_ID': subject_id, 'testRunID': testRunID, 'accuracy': score}
+        return results
+    else:
+        return results
+    # kf = KFold(n_splits=n_folds, shuffle=True)
+    # results = pd.DataFrame(columns=['subject_ID', 'fold', 'accuracy'])
+    # for split, (train, test) in enumerate(kf.split(np.arange(data.shape[0]))):
+    #     model = SVC(kernel='rbf', C=10)
+    #     X_train = data[train, :]
+    #     y_train = labels[train]
+    #     if balance_min is not None:
+    #         X_train, y_train = balance_train_data(X_train, y_train, minimize=balance_min)
+    #     model.fit(X_train, y_train)
+    #     score = model.score(data[test, :], labels[test])
+    #     results.loc[len(results)] = {'subject_ID': subject_id, 'fold': split, 'accuracy': score}
+    #
+    # return results
+
+
 def drive_decoding(data_allpt, labels, kfold=5, balance_min=None, datasource='Sherlock', ROI='early_vis'):
     t0 = time.time()
     iterable_data = [(data_allpt[i], labels, balance_min, i + 1, kfold) for i in range(len(data_allpt))]
     pool = mp.Pool(len(data_allpt))
     results = pool.map(decode_timeseries, iterable_data)
+    results = pd.concat(results)
+    # print('time consumption= ', time.time()-t0)
+    return results
+
+
+def drive_decoding_kp(data_allpt, labels, runID, kfold=5, balance_min=None, datasource='Sherlock', ROI='early_vis'):
+    t0 = time.time()
+    iterable_data = [(data_allpt[i], labels[i], runID[i], balance_min, i + 1, kfold) for i in
+                     range(len(data_allpt))]  # 每一个被试都分别被打包，作为decode_timeseries的输入。训练是每一个被试分别进行的。
+    # results = []
+    # for iter in range(len(iterable_data)):
+    #     result_t = decode_timeseries_kp(iterable_data[iter])
+    #     results.append(result_t)
+    pool = mp.Pool(len(data_allpt))
+    results = pool.map(decode_timeseries_kp, iterable_data)
     results = pd.concat(results)
     # print('time consumption= ', time.time()-t0)
     return results
@@ -84,8 +140,9 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
     hidden_reps = []
     aligned_hidden_reps = []
     behavs = []
+    runID = []
     for i in range(len(dataset)):  # 每一个被试执行一次循环
-        input_TR, behav_t = dataset[i]
+        input_TR, behav_t, runID_t = dataset[i]
         input_TR = torch.from_numpy(input_TR)
         input_TR = input_TR.unsqueeze(0).unsqueeze(0)
         input_TR = input_TR.float().to(device)
@@ -97,12 +154,14 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
             hidden, _ = decoder(common_hidden)
             aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
             behavs.append(behav_t)
+            runID.append(runID_t)
         else:
             pt = i // args.n_timerange
             decoders[pt].eval()
             hidden, _ = decoders[pt](common_hidden)
             aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
             behavs.append(behav_t)
+            runID.append(runID_t)
 
         if amlps is not None:
             idx = i // args.n_timerange
@@ -115,7 +174,7 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
     # hidden_reps = np.vstack(hidden_reps)
 
     # aligned_hidden_reps = np.vstack(aligned_hidden_reps)
-    return hidden_reps, aligned_hidden_reps, behavs
+    return hidden_reps, aligned_hidden_reps, behavs, runID
 
 
 def get_models(args):

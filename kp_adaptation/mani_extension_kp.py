@@ -123,14 +123,15 @@ for sub in subs:
 #          'sub028': [1, 2, 3, 4, 5, 6, 7, 8], 'sub029': [1, 2, 3, 4, 5, 6, 7, 8], 'sub030': [1, 2, 3, 4, 5, 6, 7, 8],
 #          'sub031': [1, 2, 3, 4, 5, 6, 7, 8], 'sub032': [1, 2, 3, 4, 5, 6, 7, 8], 'sub033': [1, 2, 3, 4, 5, 6, 7]}
 
-def removeNanTR(brain_t, behav_t):
+def removeNanTR(brain_t, behav_t, runID):
     # 因为在数据处理的时候为了保持每一个图片都被展示5次，因此在不足5次的时候采用了Nan的补足的方法，这最初是为了方便后面的被试之间的对齐损失的设计。
     # 但是现在不想考虑那么多，就直接使用本函数去掉开头是Nan的TR
     TRhead = brain_t[:, 0]
     NanID = np.isnan(TRhead)
     brain_t = brain_t[~NanID, :]
     behav_t = behav_t[~NanID]
-    return brain_t, behav_t
+    runID = runID[~NanID]
+    return brain_t, behav_t, runID
 
 
 def trainTestSplit(subList=None, TrainingSetRun=None, presentedOnly=True):
@@ -148,34 +149,49 @@ def trainTestSplit(subList=None, TrainingSetRun=None, presentedOnly=True):
         assert np.mean(np.unique((runDict[sub])) == np.unique(TrainingSetRun + TestingSetRun)) == 1
         brain = []
         behav = []
+        runID = []
         if not os.path.exists(f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run.pkl"):
             for run in TrainingSetRun:
                 brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
                 behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
-                brain_t, behav_t = removeNanTR(brain_t, behav_t)
+                runID_t = np.asarray([run] * len(behav_t))
+                brain_t, behav_t, runID_t = removeNanTR(brain_t, behav_t, runID_t)
                 brain_t = normalize(brain_t)
                 if presentedOnly:
                     presentedOnly_ID = behav_t != 0
                     brain_t = brain_t[presentedOnly_ID, :]
                     behav_t = behav_t[presentedOnly_ID]
+                    runID_t = runID_t[presentedOnly_ID]
                 brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
                 behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
-            save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run")
+                runID = runID_t if len(runID) == 0 else np.concatenate([runID, runID_t], axis=0)
+            behavior = pd.DataFrame()
+            behavior['behav'] = behav
+            behavior['runID'] = runID
+            save_obj([brain, behavior],
+                     f"{localizeData}/trainTestData/{args.ROI}/{sub}_train_{TrainingSet_RunNumber}run")
 
             brain = []
             behav = []
+            runID = []
             for run in TestingSetRun:
                 brain_t = np.load(f"{localizeData}/brain/{args.ROI}/{sub}_brain_run{run}.npy")
                 behav_t = np.load(f"{localizeData}/behav/{sub}_behav_run{run}.npy")
-                brain_t, behav_t = removeNanTR(brain_t, behav_t)
+                runID_t = np.asarray([run] * len(behav_t))
+                brain_t, behav_t, runID_t = removeNanTR(brain_t, behav_t, runID_t)
                 brain_t = normalize(brain_t)
                 if presentedOnly:
                     presentedOnly_ID = behav_t != 0
                     brain_t = brain_t[presentedOnly_ID, :]
                     behav_t = behav_t[presentedOnly_ID]
+                    runID_t = runID_t[presentedOnly_ID]
                 brain = brain_t if len(brain) == 0 else np.concatenate([brain, brain_t], axis=0)
                 behav = behav_t if len(behav) == 0 else np.concatenate([behav, behav_t], axis=0)
-            save_obj([brain, behav], f"{localizeData}/trainTestData/{args.ROI}/{sub}_test_{TestingSet_RunNumber}run")
+                runID = runID_t if len(runID) == 0 else np.concatenate([runID, runID_t], axis=0)
+            behavior = pd.DataFrame()
+            behavior['behav'] = behav
+            behavior['runID'] = runID
+            save_obj([brain, behavior], f"{localizeData}/trainTestData/{args.ROI}/{sub}_test_{TestingSet_RunNumber}run")
 
 
 trainTestSplit(subList=subs, TrainingSetRun=[1, 2, 3, 4], presentedOnly=True)
@@ -289,7 +305,7 @@ def main():
         exist = checkexist(outdf_old, dict(zip(cols, entry)))
         if exist:
             print(f"{entry} exists")
-            return
+            # return
         else:
             print(f"{entry} running")
     else:
@@ -298,7 +314,7 @@ def main():
     patient_ids = np.arange(1, args.n_subjects + 1)
     if args.ind_mrAE:
         patient_ids = [args.patient]
-    datapath = './data/localize/trainTestData/early_visual/';
+    datapath = f'./data/localize/trainTestData/{args.ROI}/'
     trainTRs = args.train_percent;
     datanaming = f"{args.ROI}_localize"
     # 加载训练时间点并训练 自动编码器 load training timepoints and train autoencoder
@@ -456,7 +472,7 @@ def main():
                                      data_3d=False,
                                      data_name_suffix=datanaming)
     encoder.eval()
-    hidden, al_hidden, behav_test = extract_hidden_reps(encoder, decoders, dataset, device, None, args)
+    hidden, al_hidden, behav_test, runID_test = extract_hidden_reps(encoder, decoders, dataset, device, None, args)
     # hidden = hidden.reshape(args.n_subjects, len(testTRs), -1)
 
     if args.ind_mrAE:
@@ -464,7 +480,7 @@ def main():
         hiddenfile = f"ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden"
     else:
         hiddenfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden"
-    save_obj([hidden, behav_test], os.path.join(savepath, hiddenfile))
+    save_obj([hidden, behav_test, runID_test], os.path.join(savepath, hiddenfile))
     # np.save(os.path.join(savepath, hiddenfile), hidden)
 
     cols.append('hiddenfile')
@@ -480,5 +496,48 @@ def main():
     outdf.to_csv(outfile, index=False)
 
 
+from lib.helper import checkexist, extract_hidden_reps, drive_decoding_kp
+
+
+def get_decoding(behav_test, runID_test, args, embeds=None):
+    entry = []
+    test_embeds = []
+    if embeds is not None:
+        test_embeds = embeds
+    else:
+        pass
+
+    labels = behav_test
+    runID = runID_test
+    results = drive_decoding_kp(test_embeds, labels, runID, balance_min=False)
+
+    entry.append(results['accuracy'].mean())
+    entry.append(results['accuracy'].std())
+    return entry, results
+
+
+def testDataClassification(args):
+    savepath = f"./data/localize/mani_extension/models/MNI152_2mm_data_{args.ROI}_mani_extend_{args.train_percent}"  # MNI152_T1_2mm_brain
+    hiddenfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden"
+    [hidden, behav_test, runID_test] = load_obj(os.path.join(savepath, hiddenfile))
+
+    cols = ['train_percent', 'ROI', 'method', 'mean', 'std']
+    outdf = pd.DataFrame(columns=cols)
+    print("get MR-AE decodings ...")  # 获得MR-AE解码
+    entry = ['4run', args.ROI, 'MRMD-AE']
+    entry_add, results = get_decoding(behav_test, runID_test, args, embeds=hidden)
+    entry.extend(entry_add)
+    outdf.loc[len(outdf)] = entry
+
+    print(outdf)
+
+    # 保存结果
+    save_obj([entry_add, results], f"{savepath}/testDataClassificationResult")
+
+    return entry, results
+
+
 if __name__ == '__main__':
     main()
+    entry, results = testDataClassification(args)
+    print('done')
