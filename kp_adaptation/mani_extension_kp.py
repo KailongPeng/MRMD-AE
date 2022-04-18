@@ -219,7 +219,8 @@ def main():
     random.seed(args.seed)
 
     # 结果应该保存在outfile
-    outfile = 'results/localize/mrmdAE_insubject_mani_extension.csv'  # outfile = 'results/mrmdAE_insubject_mani_extension.csv'
+    mkdir("./results/localize/")
+    outfile = './results/localize/mrmdAE_insubject_mani_extension.csv'  # outfile = 'results/mrmdAE_insubject_mani_extension.csv'
 
     if args.ind_mrAE:  # 如果使用独立的mr-AE。 if independent mr-AE is used
         outfile = 'results/localize/ind_mrAE_insubject_mani_extension.csv'
