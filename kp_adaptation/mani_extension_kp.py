@@ -315,7 +315,7 @@ def main():
     if args.ind_mrAE:
         patient_ids = [args.patient]
     datapath = f'./data/localize/trainTestData/{args.ROI}/'
-    trainTRs = args.train_percent;
+    trainTRs = args.train_percent
     datanaming = f"{args.ROI}_localize"
     # 加载训练时间点并训练 自动编码器 load training timepoints and train autoencoder
     dataset = fMRI_Time_Subjs_Embed_Dataset(patient_ids,
@@ -445,13 +445,18 @@ def main():
         manifold_reg_losses = np.append(manifold_reg_losses, epoch_manifold_reg_losses)
         reg_losses = np.append(reg_losses, epoch_reg_loss)
 
+        # 在训练过程中就开始保存 loss
+        all_losses = np.stack((losses, rconst_losses, manifold_reg_losses, reg_losses), axis=1)
+        lossfile = f'mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
+        np.save(os.path.join(savepath, lossfile), all_losses)
+
     all_losses = np.stack((losses, rconst_losses, manifold_reg_losses, reg_losses), axis=1)
     if not os.path.exists(savepath):
         os.makedirs(savepath)
 
     lossfile = f'mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
-    if args.ind_mrAE:
-        lossfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
+    # if args.ind_mrAE:
+    #     lossfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
     np.save(os.path.join(savepath, lossfile), all_losses)
 
     modeldict = {'encoder_state_dict': encoder.state_dict()}
