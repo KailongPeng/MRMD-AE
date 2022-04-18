@@ -14,22 +14,8 @@
 # Subset timepoints for test manifold extension within subjects
 # interpolate manifold embedding on test slices of data
 # MRMD-AE
-import os, sys
-
-print(f"conda env={os.environ['CONDA_DEFAULT_ENV']}")
-import warnings  # Ignore sklearn future warning
-import numpy as np
-import pandas as pd
-import argparse
-import torch
-import random
-
-import phate
-from lib.fMRI_kp import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
-from lib.helper import extract_hidden_reps, get_models, checkexist, drive_decoding_kp
-from torch.utils.data import DataLoader
-from lib.utils import set_grad_req
-from glob import glob
+import os
+import sys
 
 if 'watts' in os.getcwd():
     projectDir = "/home/watts/Desktop/ntblab/kailong/rt-cloud/projects/rtSynth_rt/"
@@ -39,10 +25,23 @@ elif 'milgram' in os.getcwd():
     projectDir = "/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/"
 else:
     raise Exception('path error')
-
 os.chdir(projectDir)
 sys.path.append(f"{projectDir}/PHATE/Python/")
 sys.path.append(projectDir)
+
+print(f"conda env={os.environ['CONDA_DEFAULT_ENV']}")
+import warnings  # Ignore sklearn future warning
+import numpy as np
+import pandas as pd
+import argparse
+import torch
+import random
+from lib.fMRI_kp import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
+from lib.helper import extract_hidden_reps, get_models, checkexist, drive_decoding_kp
+from torch.utils.data import DataLoader
+from lib.utils import set_grad_req
+from glob import glob
+import phate
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
