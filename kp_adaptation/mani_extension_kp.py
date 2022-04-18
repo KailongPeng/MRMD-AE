@@ -26,8 +26,8 @@ sys.path.append("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/
 sys.path.append("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
 import phate
 from lib.fMRI_kp import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
-from lib.helper import extract_hidden_reps, get_models, checkexist
-from torch.utils.data import DataLoaderI
+from lib.helper import extract_hidden_reps, get_models, checkexist, drive_decoding_kp
+from torch.utils.data import DataLoader
 from lib.utils import set_grad_req
 from glob import glob
 
@@ -265,7 +265,7 @@ def main():
             X_p = pop.fit_transform(X)
 
             # 加载测试数据
-            testpkl = glob(f"{trainTestDataPath}/{args.ROI}/{sub}_test_?run.pkl");
+            testpkl = glob(f"{trainTestDataPath}/{args.ROI}/{sub}_test_?run.pkl")
             assert len(testpkl) == 1;
             testpkl = testpkl[0]
             testRunNumber = int(testpkl.split('test_')[-1].split('run.pkl')[0])
@@ -394,8 +394,8 @@ def main():
                 outputs.append(output)
                 embeds.append(embed)
 
-            if args.shuffle_reg:
-                random.shuffle(pt_list)
+            # if args.shuffle_reg:
+            #     random.shuffle(pt_list)
 
             if args.lam > 0:  # 惩罚不同被试的潜伏空间的错位。也就是不同被试之间的批量效应。增大lambda可以对齐不同被试之间的流形。
 
@@ -468,6 +468,7 @@ def main():
     modeldict['optimizer_state_dict'] = optimizer.state_dict()
     modeldict['epoch'] = epoch
 
+    # 保存checkpoint文件，防止模型半途崩溃。
     ckptfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt"
     if args.ind_mrAE:
         ckptfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt'
@@ -502,9 +503,6 @@ def main():
         outdf_old = pd.read_csv(outfile)
         outdf = pd.concat([outdf_old, outdf])
     outdf.to_csv(outfile, index=False)
-
-
-from lib.helper import checkexist, extract_hidden_reps, drive_decoding_kp
 
 
 def get_decoding(behav_test, runID_test, args, embeds=None):
