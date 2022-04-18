@@ -23,7 +23,7 @@ LAMMANI=100  # 流形正则化 manifold regularization
 LAM=100 # 共用嵌入层正则化 commom embedding layer regularization
 TRAINPCT='4run'
 
-python3 -u mani_extension_kp.py \
+python3 -u ./kp_adaptation/mani_extension_kp.py \
 --train_percent=$TRAINPCT \
 --ROI=$ROI \
 --hidden_dim=$HIDDIM \
