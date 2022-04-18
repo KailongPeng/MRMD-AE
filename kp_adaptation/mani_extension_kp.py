@@ -14,7 +14,7 @@
 # Subset timepoints for test manifold extension within subjects
 # interpolate manifold embedding on test slices of data
 # MRMD-AE
-import os
+import os,sys
 print(f"conda env={os.environ['CONDA_DEFAULT_ENV']}")
 import warnings  # Ignore sklearn future warning
 import numpy as np
@@ -26,7 +26,7 @@ sys.path.append("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/
 import phate
 from lib.fMRI_kp import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
 from lib.helper import extract_hidden_reps, get_models, checkexist
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoaderI
 from lib.utils import set_grad_req
 from glob import glob
 
