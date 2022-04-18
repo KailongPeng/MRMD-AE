@@ -23,6 +23,7 @@ import argparse
 import torch
 import random
 sys.path.append("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/PHATE/Python")
+sys.path.append("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
 import phate
 from lib.fMRI_kp import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
 from lib.helper import extract_hidden_reps, get_models, checkexist
