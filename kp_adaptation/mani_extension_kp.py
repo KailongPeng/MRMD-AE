@@ -116,7 +116,7 @@ def check(sbatch_response):
         raise Exception(sbatch_response)
 
 
-args = parser.parse_args("")
+args = parser.parse_args()
 subs = []
 for ii in range(1, 34):
     subs.append("sub" + f"{ii}".zfill(3))
