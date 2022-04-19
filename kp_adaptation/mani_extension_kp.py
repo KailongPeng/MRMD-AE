@@ -561,6 +561,7 @@ def testDataClassification(args):
 
 def checkLoss():
     # http://localhost:8288/lab/workspaces/auto-8/tree/users/kp578/localize/MRMD-AE/archive/testMRMD-AE.ipynb
+    # /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/data/localize/mani_extension/models/MNI152_2mm_data_early_visual_mani_extend_4run/
     import os
     import numpy as np
     import matplotlib.pyplot as plt

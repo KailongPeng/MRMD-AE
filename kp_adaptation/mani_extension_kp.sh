@@ -11,7 +11,10 @@
 # cd /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/
 # sbatch ./kp_adaptation/mani_extension_kp.sh
 set -e
-cd /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/ ; module load miniconda ; conda activate env_fmri
+cd /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/ ;
+# module load miniconda ;
+. /gpfs/milgram/apps/hpc.rhel7/software/Python/Anaconda3/etc/profile.d/conda.sh
+conda activate env_fmri
 
 ROI=early_visual # 感兴趣的区域 region of interest
 BS=64 # 批量大小 batch size
