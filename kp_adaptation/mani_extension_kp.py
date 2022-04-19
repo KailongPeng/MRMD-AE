@@ -36,6 +36,7 @@ import pandas as pd
 import argparse
 import torch
 import random
+import time
 from lib.fMRI_kp import fMRIAutoencoderDataset, fMRI_Time_Subjs_Embed_Dataset
 from lib.helper import extract_hidden_reps, get_models, checkexist, drive_decoding_kp
 from torch.utils.data import DataLoader
@@ -117,6 +118,7 @@ def check(sbatch_response):
 
 
 args = parser.parse_args()
+print(f"args={args}")
 subs = []
 for ii in range(1, 34):
     subs.append("sub" + f"{ii}".zfill(3))
@@ -378,6 +380,7 @@ def main():
 
     pt_list = np.arange(len(patient_ids))
 
+    EpochStartingTime = time.time()
     for epoch in range(1, args.n_epochs + 1):
         epoch_losses = 0.0
         epoch_rconst_losses = 0.0
@@ -433,7 +436,7 @@ def main():
 
             loss = loss_reconstruct + args.lam_mani * loss_manifold_reg  # 这是真正用来训练网络权重的loss，包括重建算是和流形损失，在下一行还可能包括被试对齐损失
 
-            if args.lam > 0:
+            if args.lam > 0:  # 不同被试之间的对齐
                 loss += args.lam * loss_reg
 
             loss.backward()
@@ -452,8 +455,10 @@ def main():
         epoch_manifold_reg_losses = epoch_manifold_reg_losses / (len(trainTRs) * len(patient_ids))
         epoch_reg_loss = epoch_reg_loss / (len(trainTRs) * len(patient_ids))
 
+        CurrentTime = time.time()
+
         print(
-            f"Epoch {epoch}\tLoss={epoch_losses:.4f}\tloss_rconst={epoch_rconst_losses:.4f}\tloss_manfold_reg={epoch_manifold_reg_losses:.4f}\tloss_reg={epoch_reg_loss:.4f}")
+            f"Epoch {epoch}\tLoss={epoch_losses:.4f}\tloss_rconst={epoch_rconst_losses:.4f}\tloss_manfold_reg={epoch_manifold_reg_losses:.4f}\tloss_reg={epoch_reg_loss:.4f}\ttime passed={int((EpochStartingTime - CurrentTime)/60)}min")
 
         losses = np.append(losses, epoch_losses)
         rconst_losses = np.append(rconst_losses, epoch_rconst_losses)
@@ -554,6 +559,42 @@ def testDataClassification(args):
 
     return entry, results
 
+def checkLoss():
+    # http://localhost:8288/lab/workspaces/auto-8/tree/users/kp578/localize/MRMD-AE/archive/testMRMD-AE.ipynb
+    import os
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import pickle5 as pickle
+    def save_obj(obj, name):
+        with open(name + '.pkl', 'wb') as f:
+            # pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(obj, f)
+
+    def load_obj(name):
+        if name[-3:] == 'pkl':
+            with open(name, 'rb') as f:
+                return pickle.load(f)
+        else:
+            with open(name + '.pkl', 'rb') as f:
+                return pickle.load(f)
+    os.chdir("/gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/")
+    ROI = 'early_visual'
+    train_percent = '4run'
+    hidden_dim = 64
+    zdim = 20
+    lam = float(100)
+    lam_mani = float(100)
+    symm = False
+    savepath = f"./data/localize/mani_extension/models/MNI152_2mm_data_{ROI}_mani_extend_{train_percent}"
+    lossfile = f'mrmdAE_{hidden_dim}_{zdim}_lam{lam}_manilam{lam_mani}_symm{symm}_all_train_losses.npy'
+    all_losses = np.load(os.path.join(savepath, lossfile))
+    for whichLoss, currLoss in enumerate(['3losses', 'rconst_losses', 'manifold_reg_losses', 'reg_losses']):
+        lossRecord = all_losses[:, whichLoss]
+        _ = plt.figure()
+        _ = plt.plot(lossRecord)
+        _ = plt.ylim([0, lossRecord[0] + 10])
+        _ = plt.title(currLoss)
+    [entry_add, results] = load_obj(f"{savepath}/testDataClassificationResult")
 
 if __name__ == '__main__':
     main()

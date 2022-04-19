@@ -15,12 +15,12 @@ cd /gpfs/milgram/project/turk-browne/users/kp578/localize/MRMD-AE/ ; module load
 
 ROI=early_visual # 感兴趣的区域 region of interest
 BS=64 # 批量大小 batch size
-NEPOCHS=10 # 纪元数 number of epochs  4000
+NEPOCHS=1000 # 纪元数 number of epochs  4000
 SAVEFREQ=100 # 检查点保存频率 checkpoint save frequency
 HIDDIM=64 # 共同潜伏层尺寸  common latent layer dimension
 ZDIM=20 # 隐蔽维度 hidden dimension
-LAMMANI=100  # 流形正则化 manifold regularization
-LAM=100 # 共用嵌入层正则化 commom embedding layer regularization
+LAMMANI=1 #100  # 流形正则化 manifold regularization
+LAM=1 #100 # 共用嵌入层正则化 commom embedding layer regularization
 TRAINPCT='4run'
 
 python3 -u ./kp_adaptation/mani_extension_kp.py \
