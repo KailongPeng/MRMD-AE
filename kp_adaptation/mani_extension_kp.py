@@ -458,7 +458,7 @@ def main():
         CurrentTime = time.time()
 
         print(
-            f"Epoch {epoch}\tLoss={epoch_losses:.4f}\tloss_rconst={epoch_rconst_losses:.4f}\tloss_manfold_reg={epoch_manifold_reg_losses:.4f}\tloss_reg={epoch_reg_loss:.4f}\ttime passed={int((EpochStartingTime - CurrentTime)/60)}min")
+            f"Epoch {epoch}\tLoss={epoch_losses:.4f}\tloss_rconst={epoch_rconst_losses:.4f}\tloss_manfold_reg={epoch_manifold_reg_losses:.4f}\tloss_reg={epoch_reg_loss:.4f}\ttime passed={int((CurrentTime - EpochStartingTime)/60)}min")
 
         losses = np.append(losses, epoch_losses)
         rconst_losses = np.append(rconst_losses, epoch_rconst_losses)
